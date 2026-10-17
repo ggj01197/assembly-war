@@ -39,7 +39,7 @@ describe('조립 규칙 3개 (기획안 FINAL §4-2)', () => {
     expect(r.stats?.armor).toBe(40);
   });
 
-  it('와트는 부품 합에서 액세서리 할인을 빼고 2~7 로 자른다', () => {
+  it('와트는 부품 합에서 액세서리 할인을 빼고 3~7 로 자른다', () => {
     const base = assemble({ legs: 'legs_track_heavy', body: 'body_turret_bunker', weapon: 'wpn_turret_cannon' }, PARTS);
     expect(base.watt).toBe(5); // 1.8+1.4+2.2 = 5.4 → 5
     const miser = assemble({ legs: 'legs_track_heavy', body: 'body_turret_bunker', weapon: 'wpn_turret_cannon', accessory: 'acc_miser' }, PARTS);

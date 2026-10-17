@@ -4,11 +4,11 @@ import type { Part, Legs, Body, Weapon, Accessory } from '../data/parts';
  * 조립 규칙 3개 (기획안 FINAL §4-2, TD-004). 격납고 UI·전투·balance-sim 이 전부 이 함수 하나를 쓴다.
  *  1. 하중: 몸통+무기+액세서리 무게 ≤ 다리 하중. 남는 하중 ≤ PERFECT_SLACK 이면 완전 조립 보너스(체력 +5%).
  *  2. 형태: 몸통 형태 = 무기 형태. 대공(air/both) 무기는 어깨형 몸통에만.
- *  3. 와트: 부품 와트 합 − 액세서리 할인, 반올림, WATT_MIN~WATT_MAX 로 자른다.
+ *  3. 와트: 부품 와트 합 − 액세서리 할인, 반올림, WATT_MIN~WATT_MAX (3~7, 2026-10-17 balance-sim: 하한 2 에서는 절전 코어가 값싼 조합을 82% 승률로 만들었다) 로 자른다.
  */
 export const PERFECT_SLACK = 2;
 export const PERFECT_HP_BONUS = 0.05;
-export const WATT_MIN = 2;
+export const WATT_MIN = 3;
 export const WATT_MAX = 7;
 
 export interface Build { legs: string; body: string; weapon: string; accessory?: string }
@@ -16,6 +16,7 @@ export interface Build { legs: string; body: string; weapon: string; accessory?:
 export interface UnitStats {
   hp: number; armor: number; speed: number; sight: number;
   dmg: number; range: number; rate: number; target: 'ground' | 'air' | 'both'; move: 'ground' | 'air';
+  family: string;
 }
 
 export interface AssembleResult {
@@ -73,7 +74,7 @@ export function assemble(build: Build, parts: Part[]): AssembleResult {
 
   return {
     ok, reasons, weight, load, perfect, watt,
-    stats: { hp, armor, speed, sight, dmg: weapon.dmg, range: weapon.range, rate: weapon.rate, target, move: legs.move },
+    stats: { hp, armor, speed, sight, dmg: weapon.dmg, range: weapon.range, rate: weapon.rate, target, move: legs.move, family: weapon.family },
   };
 }
 

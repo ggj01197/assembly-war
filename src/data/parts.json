@@ -1,7 +1,7 @@
 [
   { "id": "legs_biped_light", "kind": "legs", "name": "경량 이족", "weight": 0, "watt": 1.0, "load": 26, "speed": 3.5, "hp": 60, "move": "ground" },
   { "id": "legs_track_heavy", "kind": "legs", "name": "중장 궤도", "weight": 0, "watt": 1.8, "load": 48, "speed": 1.8, "hp": 160, "move": "ground" },
-  { "id": "legs_hover", "kind": "legs", "name": "호버 추진기", "weight": 0, "watt": 1.4, "load": 32, "speed": 4.2, "hp": 70, "move": "air" },
+  { "id": "legs_hover", "kind": "legs", "name": "호버 추진기", "weight": 0, "watt": 2.8, "load": 32, "speed": 4.2, "hp": 70, "move": "air" },
 
   { "id": "body_arm_scout", "kind": "body", "name": "정찰 팔형 몸통", "weight": 10, "watt": 0.8, "shape": "arm", "hp": 120, "armor": 5, "sight": 7 },
   { "id": "body_turret_bunker", "kind": "body", "name": "벙커 탑형 몸통", "weight": 20, "watt": 1.4, "shape": "turret", "hp": 320, "armor": 30, "sight": 4 },
