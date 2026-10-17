@@ -1,0 +1,16 @@
+[
+  { "id": "legs_biped_light", "kind": "legs", "name": "경량 이족", "weight": 0, "watt": 1.0, "load": 26, "speed": 3.5, "hp": 60, "move": "ground" },
+  { "id": "legs_track_heavy", "kind": "legs", "name": "중장 궤도", "weight": 0, "watt": 1.8, "load": 48, "speed": 1.8, "hp": 160, "move": "ground" },
+  { "id": "legs_hover", "kind": "legs", "name": "호버 추진기", "weight": 0, "watt": 1.4, "load": 32, "speed": 4.2, "hp": 70, "move": "air" },
+
+  { "id": "body_arm_scout", "kind": "body", "name": "정찰 팔형 몸통", "weight": 10, "watt": 0.8, "shape": "arm", "hp": 120, "armor": 5, "sight": 7 },
+  { "id": "body_turret_bunker", "kind": "body", "name": "벙커 탑형 몸통", "weight": 20, "watt": 1.4, "shape": "turret", "hp": 320, "armor": 30, "sight": 4 },
+  { "id": "body_shoulder_guard", "kind": "body", "name": "경비 어깨형 몸통", "weight": 14, "watt": 1.1, "shape": "shoulder", "hp": 200, "armor": 15, "sight": 5 },
+
+  { "id": "wpn_arm_gatling", "kind": "weapon", "name": "팔형 기관포", "weight": 10, "watt": 1.0, "shape": "arm", "dmg": 8, "range": 4, "rate": 2.5, "target": "ground", "family": "gatling" },
+  { "id": "wpn_turret_cannon", "kind": "weapon", "name": "탑형 캐넌", "weight": 22, "watt": 2.2, "shape": "turret", "dmg": 60, "range": 7, "rate": 0.4, "target": "ground", "family": "cannon" },
+  { "id": "wpn_shoulder_missile", "kind": "weapon", "name": "어깨형 미사일", "weight": 16, "watt": 1.8, "shape": "shoulder", "dmg": 24, "range": 6, "rate": 0.8, "target": "both", "family": "missile" },
+
+  { "id": "acc_miser", "kind": "accessory", "name": "절전 코어", "weight": 3, "watt": 0, "effect": { "wattDiscount": 1 } },
+  { "id": "acc_plate", "kind": "accessory", "name": "증설 장갑", "weight": 6, "watt": 0.3, "effect": { "armor": 10, "speedPct": -10 } }
+]

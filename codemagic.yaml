@@ -1,0 +1,129 @@
+# 조립전쟁 / Assembly War — Codemagic 빌드 설정 (TD-007)
+# 개냥전쟁 codemagic.yaml(TestFlight·Play 업로드까지 검증된 Capacitor 8 구조)을 가져오고 식별자만 바꿨다.
+# 저장소 루트 = 이 파일이 있는 assembly-war 폴더.
+#
+# 처음 한 번 할 것 (순서대로):
+#   1. Apple 개발자 사이트에서 Bundle ID com.shortappstudio.assemblywar 등록
+#   2. 같은 곳에서 App Store 배포 프로파일 "AssemblyWar-AppStore-Profile" 생성 (인증서는 기존 PlayBetter-AppStore-Cert)
+#   3. App Store Connect 에서 위 Bundle ID 로 앱 레코드 생성 → 앱 ID 를 아래 APP_STORE_APPLE_ID 에
+#   4. GitHub 비공개 저장소 assembly-war → Codemagic 앱 추가 → Code signing identities 에서 Fetch profiles
+#   5. App Store Connect API 키는 계정 단위라 기존 "HaruCheck-ASC" 를 그대로 쓴다
+#   6. Android keystores 에 "assemblywar-upload" 이름으로 업로드 키 등록 (조립전쟁/서명키/Android)
+
+workflows:
+  ios-release:
+    name: iOS Release (App Store / TestFlight)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: HaruCheck-ASC
+    # release/x.y.z 브랜치에 push 하면 돈다. 일반 push 로는 돌지 않는다 (무료 빌드 시간 절약).
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'release/*'
+          include: true
+          source: true
+    environment:
+      ios_signing:
+        provisioning_profiles:
+          - AssemblyWar-AppStore-Profile
+        certificates:
+          - PlayBetter-AppStore-Cert
+      node: 22
+      vars:
+        APP_VERSION: "0.1.0"
+        APP_STORE_APPLE_ID: "REPLACE_WITH_ASC_APP_ID"   # 조립전쟁 App Store Connect 앱 ID (ASC 앱 생성 뒤 입력)
+        BUNDLE_ID: "com.shortappstudio.assemblywar"
+        XCODE_PROJECT: "App.xcodeproj"
+        XCODE_SCHEME: "App"
+    scripts:
+      - name: Install npm dependencies & build web
+        script: |
+          npm ci
+          npm run build
+      - name: Sync Capacitor iOS platform
+        script: |
+          npx cap sync ios
+      - name: Resolve Swift packages
+        script: |
+          cd ios/App
+          xcodebuild -resolvePackageDependencies -project $XCODE_PROJECT -scheme $XCODE_SCHEME
+      - name: Set version & build number
+        script: |
+          cd ios/App
+          agvtool new-marketing-version $APP_VERSION
+          # ASC 최신 번호 +1 과 Codemagic 번호 중 큰 쪽 (룬 헌터 TD-076)
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          NEXT=$(( LATEST + 1 > BUILD_NUMBER ? LATEST + 1 : BUILD_NUMBER ))
+          echo "latest=$LATEST codemagic=$BUILD_NUMBER -> $NEXT"
+          agvtool new-version -all $NEXT
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+      - name: Build ipa
+        script: |
+          xcode-project build-ipa \
+            --project ios/App/$XCODE_PROJECT \
+            --scheme $XCODE_SCHEME
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - ios/App/build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - ggj01197@gmail.com
+          - ggj011977@gmail.com
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
+
+  android-release:
+    name: Android Release (Play Store)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'release/*'
+          include: true
+          source: true
+    environment:
+      android_signing:
+        - assemblywar-upload
+      node: 22
+      java: 21
+      vars:
+        APP_VERSION: "0.1.0"
+    scripts:
+      - name: Install npm dependencies & build web
+        script: |
+          npm ci
+          npm run build
+      - name: Sync Capacitor android platform
+        script: |
+          npx cap sync android
+      - name: Check keystore
+        script: |
+          if [ -f "$CM_KEYSTORE_PATH" ]; then
+            echo "서명 키 준비됨: $CM_KEYSTORE_PATH"
+          else
+            echo "오류: 서명 키가 없습니다 (android_signing 참조명 assemblywar-upload 확인)."
+            exit 1
+          fi
+      - name: Build Android App Bundle
+        script: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew bundleRelease -PversionCode=$BUILD_NUMBER -PversionName=$APP_VERSION
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+      - android/app/build/outputs/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - ggj01197@gmail.com
+          - ggj011977@gmail.com

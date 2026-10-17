@@ -1,0 +1,90 @@
+{
+  "_comment": "앵커는 그림 폭·높이에 대한 비율(0~1). legs: foot=바닥 가운데, hip=위 장착판 가운데. body: bottom=아랫면 가운데, mount=무기 장착점. weapon: grip=몸통에 닿는 점. scale 은 공통 축척.",
+  "legs_biped_light": {
+    "scale": 0.3,
+    "foot": [
+      0.5,
+      0.97
+    ],
+    "hip": [
+      0.5,
+      0.12
+    ]
+  },
+  "legs_track_heavy": {
+    "scale": 0.3,
+    "foot": [
+      0.5,
+      0.96
+    ],
+    "hip": [
+      0.5,
+      0.12
+    ]
+  },
+  "legs_hover": {
+    "scale": 0.3,
+    "foot": [
+      0.5,
+      0.95
+    ],
+    "hip": [
+      0.5,
+      0.12
+    ]
+  },
+  "body_arm_scout": {
+    "scale": 0.3,
+    "bottom": [
+      0.5,
+      0.9
+    ],
+    "mount": [
+      0.9,
+      0.4
+    ]
+  },
+  "body_turret_bunker": {
+    "scale": 0.3,
+    "bottom": [
+      0.5,
+      0.9
+    ],
+    "mount": [
+      0.5,
+      0.12
+    ]
+  },
+  "body_shoulder_guard": {
+    "scale": 0.3,
+    "bottom": [
+      0.5,
+      0.9
+    ],
+    "mount": [
+      0.78,
+      0.1
+    ]
+  },
+  "wpn_arm_gatling": {
+    "scale": 0.3,
+    "grip": [
+      0.85,
+      0.3
+    ]
+  },
+  "wpn_turret_cannon": {
+    "scale": 0.3,
+    "grip": [
+      0.6,
+      0.92
+    ]
+  },
+  "wpn_shoulder_missile": {
+    "scale": 0.3,
+    "grip": [
+      0.9,
+      0.7
+    ]
+  }
+}

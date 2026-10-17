@@ -1,0 +1,28 @@
+node_modules
+dist
+*.local
+.DS_Store
+.firebase/
+# 서명 키·비밀번호는 저장소 밖(../서명키)에만 둔다
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+# 실제 광고·IAP ID 는 저장소 밖
+src/native/monetize.secrets.ts
+
+# Capacitor 가 빌드할 때 dist 에서 복사하는 것
+ios/App/App/public
+ios/App/Pods
+ios/.sourcemaps
+ios/capacitor-cordova-ios-plugins
+android/app/src/main/assets/public
+android/.gradle
+android/build
+android/app/build
+android/local.properties
+android/capacitor-cordova-android-plugins
+
+# 생성 에셋 원본은 00_PROJECT_CONTROL/art-src 에, 저장소에는 잘라낸 결과만
+art-work/

@@ -1,0 +1,39 @@
+{
+  "name": "assembly-war",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/lint-names.mjs && tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint:names": "node scripts/lint-names.mjs",
+    "cap:sync": "npm run build && npx cap sync",
+    "cut:sheet": "node scripts/cut-sheet.mjs",
+    "verify:combo": "node scripts/combo-check.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.5.3",
+    "@capacitor/preferences": "^8.0.1",
+    "@fontsource/jua": "^5.3.0",
+    "phaser": "^3.90.0",
+    "zod": "^4.6.5",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
+    "@types/node": "^24.13.2",
+    "playwright-core": "^1.64.0",
+    "sharp": "^0.34.3",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1",
+    "vitest": "^5.0.3"
+  }
+}
