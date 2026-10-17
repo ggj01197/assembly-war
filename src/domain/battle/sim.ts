@@ -1,11 +1,12 @@
 import type { Part } from '../../data/parts';
 import { assemble, type Build, type UnitStats } from '../assemble';
 import { scaleStats } from '../upgrade';
-import { mulberry32 } from '../rng';
+import { mulberry32, type Rng } from '../rng';
 
 /**
- * 3분 세로 전투 시뮬 (기획안 FINAL §5, TD-002). 고정 틱(20Hz) 결정론 — 같은 입력(덱·시드)이면 같은 결과.
- * 화면 없이 balance-sim·비동기 PvP 재생·V2 서버가 같은 코드를 쓴다. 3 길(좌·중·우), 길 길이 100, 아군 기지 0 / 적 기지 100.
+ * 3분 세로 전투 (기획안 FINAL §5, TD-002). 고정 틱(20Hz) 결정론 — 같은 입력(덱·시드·플레이어 명령)이면 같은 결과.
+ * `Battle` 은 한 틱씩 전진시킬 수 있어 화면(Phaser)이 그대로 쓰고, `simulate` 는 봇끼리 끝까지 돌려
+ * balance-sim·비동기 PvP 재생·V2 서버가 같은 코드를 쓴다. 3 길(좌·중·우), 길 길이 100, 아군 기지 0 / 적 기지 100.
  */
 export const TICK_HZ = 20;
 export const MATCH_SECONDS = 180;
@@ -40,24 +41,30 @@ export interface BattleResult {
   overtime: boolean;
   spawned: [number, number];
   kills: [number, number];
-  /** 카드별 생산 수·가한 피해 (balance-sim 이 부품 승률·기여를 보기 위해) */
+  /** 카드별 생산 수·가한 피해 (balance-sim 이 부품 승률·기여를 보기 위해, 결과 화면이 "어느 설계도가 밀렸는지" 보여 주려고) */
   spawnsByCard: [number[], number[]];
   damageByCard: [number[], number[]];
 }
 
-interface Unit {
+export interface Unit {
   id: number; team: Team; lane: number; pos: number;
-  hp: number; stats: UnitStats; cd: number; card: number;
+  hp: number; maxHp: number; stats: UnitStats; cd: number; card: number;
 }
 
-interface Prepared { stats: UnitStats; watt: number }
+export type BattleEvent =
+  | { type: 'spawn'; unit: number; team: Team; lane: number }
+  | { type: 'attack'; from: number; to: number | null; baseOf: Team | null; lane: number; family: string }
+  | { type: 'die'; unit: number; team: Team; lane: number; pos: number }
+  | { type: 'point'; controller: Team | -1 };
 
-function prepare(deck: Deck, parts: Part[]): Prepared[] {
+export interface Prepared { stats: UnitStats; watt: number; build: Build; level: number }
+
+export function prepareDeck(deck: Deck, parts: Part[]): Prepared[] {
   if (deck.cards.length === 0) throw new Error('덱이 비어 있습니다');
   return deck.cards.map((c, i) => {
     const r = assemble(c.build, parts);
     if (!r.ok || !r.stats) throw new Error(`카드 ${i} 조립 불가: ${r.reasons.join(', ')}`);
-    return { stats: scaleStats(r.stats, c.level ?? 1), watt: r.watt };
+    return { stats: scaleStats(r.stats, c.level ?? 1), watt: r.watt, build: c.build, level: c.level ?? 1 };
   });
 }
 
@@ -66,51 +73,94 @@ function canHit(attacker: UnitStats, target: UnitStats): boolean {
   return attacker.target === target.move;
 }
 
-export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number): BattleResult {
-  const rng = mulberry32(seed);
-  const decks: [Prepared[], Prepared[]] = [prepare(deckA, parts), prepare(deckB, parts)];
-  const units: Unit[] = [];
-  let nextId = 1;
-  const baseHp: [number, number] = [BASE_HP, BASE_HP];
-  const watt: [number, number] = [WATT_POOL / 2, WATT_POOL / 2];
-  const spawned: [number, number] = [0, 0];
-  const kills: [number, number] = [0, 0];
-  const spawnsByCard: [number[], number[]] = [decks[0].map(() => 0), decks[1].map(() => 0)];
-  const damageByCard: [number[], number[]] = [decks[0].map(() => 0), decks[1].map(() => 0)];
-  const pointTimer: [number, number] = [0, 0];
-  let controller: Team | -1 = -1;
+export interface BattleOptions {
+  /** 팀별 봇 조종 여부 (기본: 둘 다 봇). 플레이어 팀은 false 로 두고 spawn() 을 부른다. */
+  bots?: [boolean, boolean];
+  /** 팀별 와트 충전 배율 (훈련 전투에서 적을 느리게) */
+  wattMult?: [number, number];
+}
 
-  const maxTicks = (MATCH_SECONDS + OVERTIME_SECONDS) * TICK_HZ;
-  let tick = 0;
-  let overtime = false;
-  let ended = false;
+export class Battle {
+  readonly decks: [Prepared[], Prepared[]];
+  readonly units: Unit[] = [];
+  readonly baseHp: [number, number] = [BASE_HP, BASE_HP];
+  readonly watt: [number, number] = [WATT_POOL / 2, WATT_POOL / 2];
+  readonly spawned: [number, number] = [0, 0];
+  readonly kills: [number, number] = [0, 0];
+  readonly spawnsByCard: [number[], number[]];
+  readonly damageByCard: [number[], number[]];
+  readonly pointTimer: [number, number] = [0, 0];
+  controller: Team | -1 = -1;
+  tick = 0;
+  overtime = false;
+  over = false;
+  /** 방금 끝난 틱에서 일어난 일 (화면이 연출에 쓴다). step() 마다 비워진다. */
+  events: BattleEvent[] = [];
 
-  const dir = (t: Team) => (t === 0 ? 1 : -1);
-  const advancePos = (u: Unit) => u.pos + dir(u.team) * u.stats.speed * SPEED_UNIT / TICK_HZ;
-  const basePos = (t: Team) => (t === 0 ? LANE_LEN : 0); // t 가 공격하는 상대 기지 위치
+  private rng: Rng;
+  private nextId = 1;
+  private bots: [boolean, boolean];
+  private wattMult: [number, number];
+  private maxTicks = (MATCH_SECONDS + OVERTIME_SECONDS) * TICK_HZ;
 
-  while (tick < maxTicks && !ended) {
-    const sec = tick / TICK_HZ;
-    if (!overtime && sec >= MATCH_SECONDS) {
-      if (baseHp[0] !== baseHp[1]) break;
-      overtime = true; // 동률이면 연장
+  constructor(deckA: Deck, deckB: Deck, parts: Part[], seed: number, opts: BattleOptions = {}) {
+    this.rng = mulberry32(seed);
+    this.decks = [prepareDeck(deckA, parts), prepareDeck(deckB, parts)];
+    this.spawnsByCard = [this.decks[0].map(() => 0), this.decks[1].map(() => 0)];
+    this.damageByCard = [this.decks[0].map(() => 0), this.decks[1].map(() => 0)];
+    this.bots = opts.bots ?? [true, true];
+    this.wattMult = opts.wattMult ?? [1, 1];
+  }
+
+  get seconds(): number { return this.tick / TICK_HZ; }
+  /** 남은 시간(초). 연장 중에는 연장 남은 시간 */
+  get remaining(): number { return Math.max(0, (this.overtime ? MATCH_SECONDS + OVERTIME_SECONDS : MATCH_SECONDS) - this.seconds); }
+
+  /** 플레이어(또는 외부)가 카드를 생산한다. 와트·동시 유닛 상한을 지키며 성공 여부를 돌려준다. */
+  spawn(team: Team, cardIdx: number, lane: number): boolean {
+    if (this.over) return false;
+    const card = this.decks[team][cardIdx];
+    if (!card || lane < 0 || lane >= LANES) return false;
+    if (card.watt > this.watt[team] + 1e-9) return false;
+    if (this.units.filter(u => u.team === team).length >= MAX_UNITS_PER_TEAM) return false;
+    this.watt[team] -= card.watt;
+    const u: Unit = { id: this.nextId++, team, lane, pos: team === 0 ? 0 : LANE_LEN, hp: card.stats.hp, maxHp: card.stats.hp, stats: card.stats, cd: 0, card: cardIdx };
+    this.units.push(u);
+    this.spawned[team]++; this.spawnsByCard[team][cardIdx]++;
+    this.events.push({ type: 'spawn', unit: u.id, team, lane });
+    return true;
+  }
+
+  /** 한 틱(1/20초) 진행. 끝났으면 false */
+  step(): boolean {
+    this.events = [];
+    if (this.over) return false;
+    const sec = this.tick / TICK_HZ;
+    if (!this.overtime && sec >= MATCH_SECONDS) {
+      if (this.baseHp[0] !== this.baseHp[1]) { this.over = true; return false; }
+      this.overtime = true; // 동률이면 연장
     }
+    if (this.tick >= this.maxTicks) { this.over = true; return false; }
+
+    const { units, baseHp, watt, rng } = this;
+    const basePos = (t: Team) => (t === 0 ? LANE_LEN : 0); // t 가 공격하는 상대 기지 위치
 
     // 1. 와트 충전
-    const mult = overtime ? OVERTIME_MULT : sec >= MATCH_SECONDS - 60 ? FINAL_MINUTE_MULT : 1;
+    const mult = this.overtime ? OVERTIME_MULT : sec >= MATCH_SECONDS - 60 ? FINAL_MINUTE_MULT : 1;
     for (const t of [0, 1] as Team[]) {
-      const bonus = controller === t ? POINT_BONUS : 1;
-      watt[t] = Math.min(WATT_POOL, watt[t] + (WATT_PER_SEC * mult * bonus) / TICK_HZ);
+      const bonus = this.controller === t ? POINT_BONUS : 1;
+      watt[t] = Math.min(WATT_POOL, watt[t] + (WATT_PER_SEC * mult * bonus * this.wattMult[t]) / TICK_HZ);
     }
 
     // 2. 생산 판단 (봇)
-    if (tick % BOT_THINK_TICKS === 0) {
+    if (this.tick % BOT_THINK_TICKS === 0) {
       for (const t of [0, 1] as Team[]) {
+        if (!this.bots[t]) continue;
         const mine = units.filter(u => u.team === t);
         if (mine.length >= MAX_UNITS_PER_TEAM) continue;
         const enemies = units.filter(u => u.team !== t);
         const enemyAir = enemies.some(u => u.stats.move === 'air');
-        const options = decks[t].map((c, i) => ({ c, i })).filter(o => o.c.watt <= watt[t] + 1e-9);
+        const options = this.decks[t].map((c, i) => ({ c, i })).filter(o => o.c.watt <= watt[t] + 1e-9);
         if (options.length === 0) continue;
         const weights = options.map(o => (enemyAir && o.c.stats.target !== 'ground' ? 3 : 1));
         let r = rng() * weights.reduce((a, b) => a + b, 0), pick = options[0];
@@ -121,16 +171,13 @@ export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number):
         const mineByLane = [0, 0, 0];
         for (const m of mine) mineByLane[m.lane] += 1;
         const score = pressure.map((p, l) => p - mineByLane[l] + rng() * 0.9);
-        const lane = score.indexOf(Math.max(...score));
-        watt[t] -= pick.c.watt;
-        units.push({ id: nextId++, team: t, lane, pos: t === 0 ? 0 : LANE_LEN, hp: pick.c.stats.hp, stats: pick.c.stats, cd: 0, card: pick.i });
-        spawned[t]++; spawnsByCard[t][pick.i]++;
+        this.spawn(t, pick.i, score.indexOf(Math.max(...score)));
       }
     }
 
     // 3. 공격 (피해는 모아 두었다가 동시에 적용)
     const unitDamage = new Map<number, number>();
-    let baseDmg: [number, number] = [0, 0];
+    const baseDmg: [number, number] = [0, 0];
     for (const u of units) {
       u.cd -= 1;
       if (u.cd > 0) continue;
@@ -145,14 +192,15 @@ export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number):
       if (target) {
         const dealt = Math.max(1, u.stats.dmg * (1 - target.stats.armor / 100));
         unitDamage.set(target.id, (unitDamage.get(target.id) ?? 0) + dealt);
-        damageByCard[u.team][u.card] += dealt;
+        this.damageByCard[u.team][u.card] += dealt;
+        this.events.push({ type: 'attack', from: u.id, to: target.id, baseOf: null, lane: u.lane, family: u.stats.family });
         if (u.stats.family === 'cannon' && target.stats.move === 'ground') {
           for (const e of units) {
             if (e === target || e.team === u.team || e.lane !== u.lane || e.stats.move !== 'ground') continue;
             if (Math.abs(e.pos - target.pos) <= SPLASH_RADIUS) {
               const s = Math.max(1, u.stats.dmg * SPLASH_MULT * (1 - e.stats.armor / 100));
               unitDamage.set(e.id, (unitDamage.get(e.id) ?? 0) + s);
-              damageByCard[u.team][u.card] += s;
+              this.damageByCard[u.team][u.card] += s;
             }
           }
         }
@@ -160,19 +208,19 @@ export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number):
       } else if (Math.abs(basePos(u.team) - u.pos) <= range) {
         const opp: Team = u.team === 0 ? 1 : 0;
         baseDmg[opp] += u.stats.dmg;
-        damageByCard[u.team][u.card] += u.stats.dmg;
+        this.damageByCard[u.team][u.card] += u.stats.dmg;
+        this.events.push({ type: 'attack', from: u.id, to: null, baseOf: opp, lane: u.lane, family: u.stats.family });
         u.cd = Math.round(TICK_HZ / rate);
       } else {
         u.cd = 0;
       }
     }
-    // 적용
     for (const u of units) {
       const d = unitDamage.get(u.id);
       if (d) u.hp -= d;
     }
     baseHp[0] -= baseDmg[0]; baseHp[1] -= baseDmg[1];
-    for (const u of units) if (u.hp <= 0) kills[u.team === 0 ? 1 : 0]++;
+    for (const u of units) if (u.hp <= 0) { this.kills[u.team === 0 ? 1 : 0]++; this.events.push({ type: 'die', unit: u.id, team: u.team, lane: u.lane, pos: u.pos }); }
     for (let i = units.length - 1; i >= 0; i--) if (units[i].hp <= 0) units.splice(i, 1);
 
     // 4. 이동 (공격할 대상·기지가 사거리 안에 없을 때만)
@@ -183,7 +231,7 @@ export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number):
         if (e.team !== u.team && e.lane === u.lane && canHit(u.stats, e.stats) && Math.abs(e.pos - u.pos) <= range) { engaged = true; break; }
       }
       if (!engaged && Math.abs(basePos(u.team) - u.pos) <= range) engaged = true;
-      if (!engaged) u.pos = Math.min(LANE_LEN, Math.max(0, advancePos(u)));
+      if (!engaged) u.pos = Math.min(LANE_LEN, Math.max(0, u.pos + (u.team === 0 ? 1 : -1) * u.stats.speed * SPEED_UNIT / TICK_HZ));
     }
 
     // 5. 중앙 거점 점유
@@ -191,17 +239,30 @@ export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number):
     for (const u of units) if (u.lane === POINT_LANE && Math.abs(u.pos - POINT_POS) <= POINT_RADIUS) near[u.team]++;
     for (const t of [0, 1] as Team[]) {
       const o: Team = t === 0 ? 1 : 0;
-      if (near[t] > 0 && near[o] === 0) pointTimer[t] = Math.min(POINT_CAPTURE_SEC, pointTimer[t] + 1 / TICK_HZ);
-      else if (near[o] > 0) pointTimer[t] = 0;
+      if (near[t] > 0 && near[o] === 0) this.pointTimer[t] = Math.min(POINT_CAPTURE_SEC, this.pointTimer[t] + 1 / TICK_HZ);
+      else if (near[o] > 0) this.pointTimer[t] = 0;
     }
-    controller = pointTimer[0] >= POINT_CAPTURE_SEC ? 0 : pointTimer[1] >= POINT_CAPTURE_SEC ? 1 : -1;
+    const prev = this.controller;
+    this.controller = this.pointTimer[0] >= POINT_CAPTURE_SEC ? 0 : this.pointTimer[1] >= POINT_CAPTURE_SEC ? 1 : -1;
+    if (prev !== this.controller) this.events.push({ type: 'point', controller: this.controller });
 
-    tick++;
-    if (baseHp[0] <= 0 || baseHp[1] <= 0) ended = true;
+    this.tick++;
+    if (baseHp[0] <= 0 || baseHp[1] <= 0) this.over = true;
+    return !this.over;
   }
 
-  let winner: Team | -1;
-  if (baseHp[0] === baseHp[1]) winner = -1;
-  else winner = baseHp[0] > baseHp[1] ? 0 : 1;
-  return { winner, baseHp: [Math.max(0, baseHp[0]), Math.max(0, baseHp[1])], seconds: tick / TICK_HZ, overtime, spawned, kills, spawnsByCard, damageByCard };
+  result(): BattleResult {
+    const winner: Team | -1 = this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
+    return {
+      winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime,
+      spawned: [...this.spawned], kills: [...this.kills], spawnsByCard: [[...this.spawnsByCard[0]], [...this.spawnsByCard[1]]], damageByCard: [[...this.damageByCard[0]], [...this.damageByCard[1]]],
+    } as BattleResult;
+  }
+}
+
+/** 봇끼리 끝까지 돌린다 (balance-sim·재생용) */
+export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number): BattleResult {
+  const b = new Battle(deckA, deckB, parts, seed);
+  while (b.step()) { /* 끝날 때까지 */ }
+  return b.result();
 }
