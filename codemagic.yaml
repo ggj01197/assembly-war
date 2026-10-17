@@ -34,7 +34,7 @@ workflows:
       node: 22
       vars:
         APP_VERSION: "0.1.0"
-        APP_STORE_APPLE_ID: "REPLACE_WITH_ASC_APP_ID"   # 조립전쟁 App Store Connect 앱 ID (ASC 앱 생성 뒤 입력)
+        APP_STORE_APPLE_ID: "6823884773"   # 조립전쟁 App Store Connect 앱 ID (2026-10-17 생성)
         BUNDLE_ID: "com.shortappstudio.assemblywar"
         XCODE_PROJECT: "App.xcodeproj"
         XCODE_SCHEME: "App"
