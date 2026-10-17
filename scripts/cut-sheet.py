@@ -1,15 +1,17 @@
 # 파츠 시트(3×3 그리드, 마젠타 배경)를 칸별 투명 PNG 로 자른다 (TD-006).
-# 사용: python scripts/cut-sheet.py <시트.png> <출력폴더> [id1,id2,...9개]
+# 사용: python scripts/cut-sheet.py <시트.png> <출력폴더> <id1,id2,...> [열=3 행=3]   (id 가 '-' 면 그 칸은 건너뜀)
 # 마젠타(#FF00FF 근처)를 투명으로 바꾸고, 가장자리 보라 번짐은 색을 되돌린다(디스필). 여백은 잘라낸다.
 import sys, os
 from PIL import Image
 
 src, out = sys.argv[1], sys.argv[2]
-ids = sys.argv[3].split(',') if len(sys.argv) > 3 else [f'cell_{i}' for i in range(9)]
+COLS = int(sys.argv[4]) if len(sys.argv) > 4 else 3
+ROWS = int(sys.argv[5]) if len(sys.argv) > 5 else 3
+ids = sys.argv[3].split(',') if len(sys.argv) > 3 else [f'cell_{i}' for i in range(COLS * ROWS)]
 os.makedirs(out, exist_ok=True)
 im = Image.open(src).convert('RGB')
 W, H = im.size
-cw, ch = W // 3, H // 3
+cw, ch = W // COLS, H // ROWS
 PAD = 12  # 격자선 피하기
 
 def key(px):
@@ -21,7 +23,8 @@ def key(px):
     return 255
 
 for i, pid in enumerate(ids):
-    cx, cy = (i % 3) * cw, (i // 3) * ch
+    if pid == '-': continue
+    cx, cy = (i % COLS) * cw, (i // COLS) * ch
     cell = im.crop((cx + PAD, cy + PAD, cx + cw - PAD, cy + ch - PAD))
     rgba = Image.new('RGBA', cell.size)
     src_px, dst_px = cell.load(), rgba.load()

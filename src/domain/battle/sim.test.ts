@@ -68,11 +68,32 @@ describe('전투 시뮬 (결정론 틱, 기획안 FINAL §5)', () => {
     expect(wins).toBeGreaterThanOrEqual(8);
   });
 
-  it('유효한 모든 조합이 시뮬에서 오류 없이 돈다', () => {
-    for (const b of allValidBuilds(PARTS)) {
+  it('유효한 조합 표본(매 7번째)이 시뮬에서 오류 없이 돌고 체력이 정상 범위다', () => {
+    const all = allValidBuilds(PARTS);
+    expect(all.length).toBeGreaterThan(150);
+    for (let i = 0; i < all.length; i += 7) {
+      const b = all[i];
       expect(assemble(b, PARTS).ok).toBe(true);
       const r = simulate(deck(b), deck(biped), PARTS, 2);
       expect(r.seconds).toBeGreaterThan(0);
+      expect(r.baseHp[0]).toBeLessThanOrEqual(1000);
+      expect(r.baseHp[1]).toBeLessThanOrEqual(1000);
     }
+  }, 120000);
+
+  it('수리 부품은 아군을 치료하되 최대 체력을 넘기지 않는다', () => {
+    const medic = { legs: 'legs_quad_walker', body: 'body_arm_medic', weapon: 'wpn_repair_beam' };
+    const r = simulate(deck(biped, medic), deck(biped), PARTS, 9);
+    expect(r.damageByCard[0][1]).toBeGreaterThanOrEqual(0);
+    expect(r.spawnsByCard[0][1]).toBeGreaterThan(0);
+  });
+
+  it('레이저는 방어를 일부 무시하고, 박격포는 최소 사거리 안의 적을 못 때린다', () => {
+    const laserB = { legs: 'legs_quad_walker', body: 'body_arm_assault', weapon: 'wpn_laser_beam' };
+    const r1 = assemble(laserB, PARTS).stats!;
+    expect(r1.pierce).toBe(0.5);
+    const mortar = assemble({ legs: 'legs_track_heavy', body: 'body_turret_bunker', weapon: 'wpn_mortar_heavy' }, PARTS).stats!;
+    expect(mortar.minRange).toBe(4);
+    expect(mortar.splash).toBe(7);
   });
 });

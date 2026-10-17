@@ -57,9 +57,9 @@ describe('조립 규칙 3개 (기획안 FINAL §4-2)', () => {
     expect(r.reasons[0]).toContain('다리');
   });
 
-  it('시험용 3×3×3 중 형태가 맞는 조합은 다리 3 × 짝 3 = 9 개 이하', () => {
+  it('60종에서 조립 가능한 조합이 충분히 많고 모두 규칙을 지킨다', () => {
     const builds = allValidBuilds(PARTS);
     expect(builds.length).toBeGreaterThan(0);
-    expect(builds.length).toBeLessThanOrEqual(9);
+    expect(builds.length).toBeGreaterThan(150);
   });
 });

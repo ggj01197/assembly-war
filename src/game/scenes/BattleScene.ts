@@ -15,6 +15,17 @@ export interface BattleConfig { stage: Stage; battle: Battle; hud: BattleHud; re
 interface View { c: Phaser.GameObjects.Container; unit: Unit; ty: number; tx: number; lift: number; h: number }
 interface Fx { kind: 'tracer' | 'blast' | 'puff' | 'ring'; x1: number; y1: number; x2: number; y2: number; t: number; dur: number; color: number; r: number }
 
+/** 무기 계열별 연출: 선 색·굵기·길이, 착탄 폭발, 소리 (sim 은 계열 이름을 몰라도 되고 연출만 안다) */
+const FAMILY_FX: Record<string, { color: number; width: number; dur: number; blast?: { r: number; color: number; t: number; dur: number }; sound: string; gap: number }> = {
+  gatling: { color: 0xffe07a, width: 2, dur: 0.1, sound: 'gatling', gap: 110 },
+  cannon: { color: 0xff9f43, width: 4, dur: 0.18, blast: { r: 26, color: 0xffa94d, t: 0, dur: 0.3 }, sound: 'cannon', gap: 160 },
+  missile: { color: 0x5fd3ff, width: 3, dur: 0.26, blast: { r: 14, color: 0x8fe9ff, t: 0.2, dur: 0.25 }, sound: 'missile', gap: 140 },
+  laser: { color: 0xb8f7ff, width: 4, dur: 0.14, sound: 'laser', gap: 120 },
+  blade: { color: 0xf0fbff, width: 5, dur: 0.1, blast: { r: 12, color: 0xdff6ff, t: 0, dur: 0.18 }, sound: 'blade', gap: 100 },
+  flak: { color: 0xfff3b0, width: 3, dur: 0.12, blast: { r: 22, color: 0xffffff, t: 0.08, dur: 0.22 }, sound: 'flak', gap: 120 },
+  repair: { color: 0x6fe39a, width: 3, dur: 0.2, sound: 'repair', gap: 160 },
+  mortar: { color: 0xffc46b, width: 5, dur: 0.34, blast: { r: 38, color: 0xff9f43, t: 0.28, dur: 0.38 }, sound: 'mortar', gap: 200 },
+};
 const TRAY_H = 176;     // CSS 와 같아야 한다 (battle .bt-tray)
 const TOP_H = 84;       // 위 막대·타이머
 
@@ -31,11 +42,12 @@ export class BattleScene extends Phaser.Scene {
   private pointPulse = 0;
   private W = 390; private H = 844; private y0 = 130; private y1 = 600; private k = 0.36;
   private firstSpawnHinted = false;
+  private wattFull = false;
   private dead = false;
 
   constructor() { super('battle'); }
 
-  init(cfg: BattleConfig) { this.cfg = cfg; this.views.clear(); this.fx = []; this.acc = 0; this.selected = null; this.ended = false; this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.dead = false; }
+  init(cfg: BattleConfig) { this.cfg = cfg; this.views.clear(); this.fx = []; this.acc = 0; this.selected = null; this.ended = false; this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; }
 
   preload() {
     if (!this.textures.exists('hangar_bg')) this.load.image('hangar_bg', 'art/hangar_bg.jpg');
@@ -112,6 +124,8 @@ export class BattleScene extends Phaser.Scene {
     this.sync(b, delta);
     this.draw(b, delta);
     this.cfg.hud.update(b, this.selected);
+    // 와트가 가득 차면(낭비되기 직전) 한 번 알려 준다
+    if (b.watt[0] >= 9.99 && !this.wattFull) { this.wattFull = true; play('ready'); } else if (b.watt[0] < 9) this.wattFull = false;
   }
 
   private posOf(id: number, b: Battle): { x: number; y: number } | null {
@@ -135,15 +149,18 @@ export class BattleScene extends Phaser.Scene {
         let tx: number, ty: number;
         if (e.to !== null) { const t = this.posOf(e.to, b); if (!t) continue; tx = t.x; ty = t.y; }
         else { tx = this.laneX(e.lane); ty = this.baseY(e.baseOf as 0 | 1); this.baseFlash[e.baseOf as 0 | 1] = 1; play('hit', 80); if (e.baseOf === 0 && !this.cfg.reducedMotion) this.cameras.main.shake(70, 0.003); }
-        if (e.family === 'cannon') { this.fx.push({ kind: 'tracer', x1: a.x, y1: a.y - 22, x2: tx, y2: ty - 10, t: 0, dur: 0.18, color: 0xff9f43, r: 4 }, { kind: 'blast', x1: tx, y1: ty, x2: tx, y2: ty, t: 0, dur: 0.3, color: 0xffa94d, r: 26 }); play('cannon', 160); }
-        else if (e.family === 'missile') { this.fx.push({ kind: 'tracer', x1: a.x, y1: a.y - 26, x2: tx, y2: ty - 10, t: 0, dur: 0.26, color: 0x5fd3ff, r: 3 }, { kind: 'blast', x1: tx, y1: ty, x2: tx, y2: ty, t: 0.2, dur: 0.25, color: 0x8fe9ff, r: 14 }); play('missile', 140); }
-        else { this.fx.push({ kind: 'tracer', x1: a.x, y1: a.y - 22, x2: tx, y2: ty - 12, t: 0, dur: 0.1, color: 0xffe07a, r: 2 }); play('gatling', 110); }
+        const fx = FAMILY_FX[e.family] ?? FAMILY_FX.gatling;
+        this.fx.push({ kind: 'tracer', x1: a.x, y1: a.y - 22, x2: tx, y2: ty - 10, t: 0, dur: fx.dur, color: fx.color, r: fx.width });
+        if (fx.blast) this.fx.push({ kind: 'blast', x1: tx, y1: ty, x2: tx, y2: ty, t: fx.blast.t, dur: fx.blast.dur, color: fx.blast.color, r: fx.blast.r });
+        if (e.family === 'repair') this.fx.push({ kind: 'ring', x1: tx, y1: ty, x2: tx, y2: ty, t: 0.05, dur: 0.3, color: 0x6fe39a, r: 22 });
+        play(fx.sound, fx.gap);
       } else if (e.type === 'die') {
         const x = this.laneX(e.lane), y = this.posToY(e.pos);
         this.fx.push({ kind: 'puff', x1: x, y1: y - 18, x2: x, y2: y - 18, t: 0, dur: 0.45, color: e.team === 0 ? 0x5fd3ff : 0xff7a45, r: 30 });
         play('boom', 110);
       } else if (e.type === 'point') {
         this.pointPulse = 1;
+        if (e.controller === 0) play('pointCapture');
       }
     }
   }

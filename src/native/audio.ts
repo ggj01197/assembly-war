@@ -12,7 +12,7 @@ let noiseBuf: AudioBuffer | null = null;
 let enabled = true;
 const lastPlayed: Record<string, number> = {};
 
-export function setSoundEnabled(on: boolean): void { enabled = on; }
+export function setSoundEnabled(on: boolean): void { enabled = on; if (!on) playMusic(null); }
 
 function ensure(): AudioContext | null {
   if (ctx) return ctx;
@@ -25,6 +25,7 @@ function ensure(): AudioContext | null {
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  loadFiles();
   return ctx;
 }
 
@@ -78,12 +79,52 @@ const BANK: Record<string, () => void> = {
   gatling: () => { noise(0, 0.05, 0.18, { f: 2400, q: 1.2 }); },
   cannon: () => { tone(0, 120, 0.25, 0.4, { to: 50 }); noise(0, 0.2, 0.3, { type: 'lowpass', f: 1200, to: 200 }); },
   missile: () => { noise(0, 0.35, 0.22, { f: 800, to: 4000, q: 0.8, a: 0.03 }); },
+  laser: () => { tone(0, 1400, 0.16, 0.1, { type: 'sawtooth', to: 600 }); noise(0, 0.12, 0.08, { type: 'highpass', f: 5000 }); },
+  blade: () => { noise(0, 0.1, 0.22, { f: 3200, to: 900, q: 1.4, a: 0.005 }); tone(0.02, 1800, 0.08, 0.06, { type: 'triangle', to: 900 }); },
+  flak: () => { noise(0, 0.15, 0.25, { f: 1800, to: 500, q: 0.8 }); tone(0, 260, 0.12, 0.15, { type: 'square', to: 120 }); },
+  repair: () => { tone(0, 660, 0.14, 0.09, { type: 'sine', to: 990 }); tone(0.08, 880, 0.14, 0.07, { type: 'sine', to: 1320 }); },
+  mortar: () => { tone(0, 90, 0.35, 0.45, { to: 45 }); noise(0, 0.3, 0.3, { type: 'lowpass', f: 900, to: 150 }); tone(0.3, 140, 0.3, 0.25, { to: 60 }); },
   hit: () => { noise(0, 0.06, 0.15, { f: 1800, q: 1.5 }); },
   boom: () => { tone(0, 100, 0.4, 0.5, { to: 40 }); noise(0, 0.4, 0.35, { type: 'lowpass', f: 1400, to: 150 }); },
   baseHit: () => { tone(0, 70, 0.5, 0.6, { to: 35 }); noise(0, 0.5, 0.3, { type: 'lowpass', f: 700, to: 120 }); },
   win: () => { [392, 523.25, 659.25, 784].forEach((f, i) => tone(i * 0.12, f, 0.55, 0.16, { type: 'triangle' })); },
   lose: () => { [330, 262, 196].forEach((f, i) => tone(i * 0.18, f, 0.5, 0.16, { type: 'sawtooth', to: f * 0.8 })); },
 };
+
+/**
+ * ElevenLabs 로 만든 효과음 파일 (public/audio/sfx/<이름>.mp3). 첫 터치로 오디오가 열리면 한꺼번에 내려받아 해독하고,
+ * 아직 없거나 실패한 소리는 위 합성음이 그대로 나온다. 파일이 2~4초로 길게 나와서 이름마다 재생 길이 상한(초)을 둔다.
+ */
+const FILE_MAX: Record<string, number> = {
+  gatling: 0.5, cannon: 1.0, missile: 1.1, laser: 0.6, blade: 0.5, flak: 0.9, repair: 0.9, mortar: 1.0, hit: 0.35, boom: 1.0, baseHit: 1.3,
+  spawn: 0.8, uiClick: 0.2, uiBack: 0.25, deny: 0.4, win: 2.2, lose: 2.2, logoHit: 1.6, stamp: 0.6, packBurst: 1.1, ready: 0.3, pointCapture: 1.0,
+};
+const FILE_GAIN: Record<string, number> = { gatling: 0.7, hit: 0.8, uiClick: 0.8, spawn: 0.9 };
+const bufs: Record<string, AudioBuffer> = {};
+let loading = false;
+function loadFiles(): void {
+  if (loading || !ctx) return;
+  loading = true;
+  const c = ctx;
+  for (const name of Object.keys(FILE_MAX)) {
+    fetch(`audio/sfx/${name}.mp3`).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+      .then(ab => { c.decodeAudioData(ab, b => { bufs[name] = b; }, () => { /* 해독 실패 → 합성음 */ }); })
+      .catch(() => { /* 파일이 없으면 합성음 */ });
+  }
+}
+function playFile(name: string): boolean {
+  const b = bufs[name];
+  if (!b || !ctx || !master) return false;
+  const t = ctx.currentTime, cap = Math.min(b.duration, FILE_MAX[name] ?? b.duration);
+  const src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = b;
+  g.gain.setValueAtTime(FILE_GAIN[name] ?? 1, t);
+  g.gain.setValueAtTime(FILE_GAIN[name] ?? 1, t + Math.max(0, cap - 0.06));
+  g.gain.linearRampToValueAtTime(0.0001, t + cap);
+  src.connect(g); g.connect(master);
+  src.start(t); src.stop(t + cap + 0.02);
+  return true;
+}
 
 /** 같은 소리를 너무 자주 내지 않게 (전투 중 기관포 연사 등). minGap 은 밀리초. */
 export function play(name: keyof typeof BANK | string, minGap = 0): void {
@@ -93,7 +134,55 @@ export function play(name: keyof typeof BANK | string, minGap = 0): void {
   const now = performance.now();
   if (minGap && now - (lastPlayed[name] ?? 0) < minGap) return;
   lastPlayed[name] = now;
-  try { BANK[name]?.(); } catch { /* 소리 실패가 게임을 멈추게 하지 않는다 */ }
+  try { if (!playFile(name)) BANK[name]?.(); } catch { /* 소리 실패가 게임을 멈추게 하지 않는다 */ }
+}
+
+// ───────── BGM ─────────
+// public/audio/bgm/<이름>.mp3 (ElevenLabs, 가사 없음 전사 확인). 쓸 때 한 번 내려받아 해독하고 1초 크로스페이드로 바꾼다.
+export type MusicName = 'hangar' | 'battle';
+const MUSIC_VOL = 0.32, FADE = 1.0;
+const musicBuf: Partial<Record<MusicName, AudioBuffer>> = {};
+const musicLoading: Partial<Record<MusicName, Promise<AudioBuffer | null>>> = {};
+let musicCur: { name: MusicName; src: AudioBufferSourceNode; gain: GainNode } | null = null;
+let musicWant: MusicName | null = null;
+
+function loadMusic(name: MusicName): Promise<AudioBuffer | null> {
+  if (musicBuf[name]) return Promise.resolve(musicBuf[name]!);
+  if (musicLoading[name]) return musicLoading[name]!;
+  const c = ensure();
+  if (!c) return Promise.resolve(null);
+  musicLoading[name] = fetch(`audio/bgm/${name}.mp3`)
+    .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+    .then(ab => new Promise<AudioBuffer | null>(res => { c.decodeAudioData(ab, b => { musicBuf[name] = b; res(b); }, () => res(null)); }))
+    .catch(() => null);
+  return musicLoading[name]!;
+}
+
+/** 배경 음악을 바꾼다. null 이면 서서히 끈다. 같은 곡이 이미 나오면 아무것도 안 한다. */
+export function playMusic(name: MusicName | null): void {
+  musicWant = name;
+  if (!enabled && name) return;
+  const c = ensure();
+  if (!c || !master) return;
+  if (musicCur && musicCur.name === name) return;
+  const old = musicCur;
+  if (old) {
+    const t = c.currentTime;
+    old.gain.gain.cancelScheduledValues(t); old.gain.gain.setValueAtTime(old.gain.gain.value, t); old.gain.gain.linearRampToValueAtTime(0.0001, t + FADE);
+    try { old.src.stop(t + FADE + 0.05); } catch { /* 이미 멈춤 */ }
+    musicCur = null;
+  }
+  if (!name) return;
+  void loadMusic(name).then(b => {
+    if (!b || musicWant !== name || musicCur || !ctx || !master) return; // 그 사이 다른 곡을 원했으면 무시
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = b; src.loop = true;
+    gain.gain.setValueAtTime(0.0001, t); gain.gain.linearRampToValueAtTime(MUSIC_VOL, t + FADE);
+    src.connect(gain); gain.connect(master);
+    src.start(t);
+    musicCur = { name, src, gain };
+  });
 }
 
 /** 진동 (Capacitor Haptics 는 5단계 설정 연동 때 연결) */

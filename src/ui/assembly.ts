@@ -2,7 +2,7 @@ import { assemble, type Build } from '../domain/assemble';
 import { PARTS, type Part, type Legs, type Body, type Weapon, type Accessory } from '../data/parts';
 import { store, setSlot } from '../game/store';
 import { unitFit, esc, TARGET_LABEL, SHAPE_LABEL } from './unitView';
-import { spriteUrl } from '../game/unitLayout';
+import { spriteUrl, accIconUrl } from '../game/unitLayout';
 import { play } from '../native/audio';
 import { levelMultiplier } from '../domain/upgrade';
 import type { Nav, Screen } from './app';
@@ -19,6 +19,9 @@ const effectText = (a: Accessory): string => {
   if (e.hpPct) out.push(`체력 +${e.hpPct}%`);
   if (e.addAir) out.push('대공 추가');
   if (e.sight) out.push(`시야 +${e.sight}`);
+  if (e.dmgPct) out.push(`공격 +${e.dmgPct}%`);
+  if (e.ratePct) out.push(`연사 +${e.ratePct}%`);
+  if (e.rangeAdd) out.push(`사거리 +${e.rangeAdd}`);
   return out.join(' · ') || '효과 없음';
 };
 
@@ -68,9 +71,12 @@ export function mountAssembly(root: HTMLElement, nav: Nav): Screen {
     let line = '';
     if (p.kind === 'legs') line = `하중 ${p.load} · 속도 ${p.speed} · ${p.move === 'air' ? '공중' : '지상'}`;
     if (p.kind === 'body') line = `무게 ${p.weight} · 체력 ${p.hp} · 방어 ${p.armor} · ${SHAPE_LABEL[p.shape]}`;
-    if (p.kind === 'weapon') line = `무게 ${p.weight} · 피해 ${p.dmg}×${p.rate} · 사거리 ${p.range} · ${SHAPE_LABEL[p.shape]} · ${TARGET_LABEL[p.target]}`;
+    if (p.kind === 'weapon') {
+      const ex = [p.family === 'repair' ? '치료' : '', p.splash ? `광역 ${p.splash}` : '', p.pierce ? `방어 ${Math.round(p.pierce * 100)}% 무시` : '', p.minRange ? `최소 사거리 ${p.minRange}` : ''].filter(Boolean).join(' · ');
+      line = `무게 ${p.weight} · ${p.family === 'repair' ? '치료' : '피해'} ${p.dmg}×${p.rate} · 사거리 ${p.range} · ${SHAPE_LABEL[p.shape]} · ${p.family === 'repair' ? '아군' : TARGET_LABEL[p.target]}${ex ? ' · ' + ex : ''}`;
+    }
     if (p.kind === 'accessory') line = `무게 ${p.weight} · ${effectText(p)}`;
-    const img = p.kind === 'accessory' ? '<i class="acc-ic">⚙</i>' : `<img src="${spriteUrl(p.id)}" alt="" draggable="false">`;
+    const img = p.kind === 'accessory' ? `<img src="${accIconUrl(p.id)}" alt="" draggable="false">` : `<img src="${spriteUrl(p.id)}" alt="" draggable="false">`;
     return `<button class="pchip ${cur ? 'on' : ''}" data-id="${p.id}" type="button">${img}<span><b>${esc(p.name)}</b><small>${esc(line)}</small></span></button>`;
   }
 

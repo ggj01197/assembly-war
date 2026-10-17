@@ -16,6 +16,7 @@ const A = anchors as unknown as Record<string, Anchor>;
 export const spriteSize: Record<string, { w: number; h: number }> = {};
 
 export function spriteUrl(id: string): string { return `sprites/parts/${id}.png`; }
+export function accIconUrl(id: string): string { return `sprites/acc/${id}.png`; }
 
 export function loadSprites(): Promise<void> {
   const ids = PARTS.filter(p => p.kind !== 'accessory').map(p => p.id);

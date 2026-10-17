@@ -1,4 +1,4 @@
-import { play, unlockAudio } from '../native/audio';
+import { play, unlockAudio, playMusic } from '../native/audio';
 
 /**
  * 스튜디오 공통 오프닝 (합패 `board.html #intro` · `board.js INTRO` 이식, STUDIO_OPENING_SPEC.md).
@@ -72,6 +72,7 @@ export function runOpening(root: HTMLElement): Promise<void> {
       el.classList.remove('s'); el.classList.add('t');
       later(() => play('logoHit'), 700);
       later(() => play('stamp'), 1000);
+      playMusic('hangar'); // 타이틀부터 곡이 시작된다 (합패와 같은 순서: 오프닝 곡 → 메뉴 곡)
       // 글자 수가 4 보다 많으면 0.3초씩 늘려 내려앉힌다 (기준: 합패 2글자 .7/1.0초)
       el.querySelectorAll<HTMLElement>('.in-logo span').forEach((s, i) => { s.style.animationDelay = `${0.7 + i * 0.3}s`; });
     }

@@ -5,7 +5,7 @@ import { Battle, type Deck } from '../domain/battle/sim';
 import { settle } from '../domain/rewards';
 import { store, boot, update, flushSave } from '../game/store';
 import { loadSprites } from '../game/unitLayout';
-import { setSoundEnabled } from '../native/audio';
+import { setSoundEnabled, playMusic } from '../native/audio';
 import { runOpening } from './opening';
 import { mountHangar } from './hangar';
 import { mountAssembly } from './assembly';
@@ -40,6 +40,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     if (current && current !== name) screens[current].hide();
     hud.hide();
     current = name;
+    playMusic('hangar');
     screens[name].show(arg);
   }
 
@@ -51,6 +52,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     const battle = new Battle(player, enemy, PARTS, (Date.now() & 0x7fffffff) >>> 0, { bots: [false, true], wattMult: [1, stage.enemyWattMult] });
     if (current) screens[current].hide();
     current = null;
+    playMusic('battle');
     const finish = () => { game.scene.stop('battle'); };
     game.scene.start('battle', {
       stage, battle, hud, reducedMotion: s.settings.reducedMotion,
@@ -62,7 +64,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         void flushSave();
         hud.hide();
         const data: ResultData = { stage, battle: b, builds: s.deck, rewards: settled.rewards, win, quit: false };
-        current = 'result'; screens.result.show(data);
+        current = 'result'; playMusic('hangar'); screens.result.show(data);
         finish();
       },
       onQuit: () => { finish(); show('hangar'); },

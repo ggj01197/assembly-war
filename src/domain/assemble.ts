@@ -17,6 +17,7 @@ export interface UnitStats {
   hp: number; armor: number; speed: number; sight: number;
   dmg: number; range: number; rate: number; target: 'ground' | 'air' | 'both'; move: 'ground' | 'air';
   family: string;
+  splash: number; pierce: number; minRange: number;
 }
 
 export interface AssembleResult {
@@ -55,7 +56,7 @@ export function assemble(build: Build, parts: Part[]): AssembleResult {
 
   // 2. 형태
   if (body.shape !== weapon.shape) reasons.push(`형태 불일치: 몸통 ${body.shape} · 무기 ${weapon.shape}`);
-  if (weapon.target !== 'ground' && body.shape !== 'shoulder') reasons.push('대공 무기는 어깨형 몸통에만 장착할 수 있습니다');
+  if (weapon.family !== 'repair' && weapon.target !== 'ground' && body.shape !== 'shoulder') reasons.push('대공 무기는 어깨형 몸통에만 장착할 수 있습니다');
 
   // 3. 와트
   const rawWatt = legs.watt + body.watt + weapon.watt + (acc?.watt ?? 0) - (acc?.effect.wattDiscount ?? 0);
@@ -64,6 +65,7 @@ export function assemble(build: Build, parts: Part[]): AssembleResult {
   const ok = reasons.length === 0;
   if (!ok) return { ok, reasons, weight, load, perfect: false, watt, stats: null };
 
+  const e = acc?.effect;
   const hpBase = legs.hp + body.hp;
   const hp = Math.round(hpBase * (1 + (perfect ? PERFECT_HP_BONUS : 0) + (acc?.effect.hpPct ?? 0) / 100));
   const armor = Math.min(60, body.armor + (acc?.effect.armor ?? 0));
@@ -74,7 +76,14 @@ export function assemble(build: Build, parts: Part[]): AssembleResult {
 
   return {
     ok, reasons, weight, load, perfect, watt,
-    stats: { hp, armor, speed, sight, dmg: weapon.dmg, range: weapon.range, rate: weapon.rate, target, move: legs.move, family: weapon.family },
+    stats: {
+      hp, armor, speed, sight,
+      dmg: Math.round(weapon.dmg * (1 + (e?.dmgPct ?? 0) / 100) * 100) / 100,
+      range: Math.round((weapon.range + (e?.rangeAdd ?? 0)) * 100) / 100,
+      rate: Math.round(weapon.rate * (1 + (e?.ratePct ?? 0) / 100) * 100) / 100,
+      target, move: legs.move, family: weapon.family,
+      splash: weapon.splash ?? 0, pierce: weapon.pierce ?? 0, minRange: weapon.minRange ?? 0,
+    },
   };
 }
 

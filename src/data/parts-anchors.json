@@ -1,90 +1,435 @@
 {
-  "_comment": "앵커는 그림 폭·높이에 대한 비율(0~1). legs: foot=바닥 가운데, hip=위 장착판 가운데. body: bottom=아랫면 가운데, mount=무기 장착점. weapon: grip=몸통에 닿는 점. scale 은 공통 축척.",
-  "legs_biped_light": {
-    "scale": 0.3,
-    "foot": [
-      0.5,
-      0.97
-    ],
-    "hip": [
-      0.5,
-      0.12
-    ]
-  },
-  "legs_track_heavy": {
-    "scale": 0.3,
-    "foot": [
-      0.5,
-      0.96
-    ],
-    "hip": [
-      0.5,
-      0.12
-    ]
-  },
-  "legs_hover": {
-    "scale": 0.3,
-    "foot": [
-      0.5,
-      0.95
-    ],
-    "hip": [
-      0.5,
-      0.12
-    ]
-  },
-  "body_arm_scout": {
-    "scale": 0.3,
-    "bottom": [
-      0.5,
-      0.9
-    ],
-    "mount": [
-      0.9,
-      0.4
-    ]
-  },
-  "body_turret_bunker": {
-    "scale": 0.3,
-    "bottom": [
-      0.5,
-      0.9
-    ],
-    "mount": [
-      0.5,
-      0.12
-    ]
-  },
-  "body_shoulder_guard": {
-    "scale": 0.3,
-    "bottom": [
-      0.5,
-      0.9
-    ],
-    "mount": [
-      0.78,
-      0.1
-    ]
-  },
-  "wpn_arm_gatling": {
-    "scale": 0.3,
-    "grip": [
-      0.85,
-      0.3
-    ]
-  },
-  "wpn_turret_cannon": {
-    "scale": 0.3,
-    "grip": [
-      0.6,
-      0.92
-    ]
-  },
-  "wpn_shoulder_missile": {
-    "scale": 0.3,
-    "grip": [
-      0.9,
-      0.7
-    ]
-  }
+ "_comment": "앵커는 그림 폭·높이에 대한 비율(0~1). 자동 생성 — scripts/make-anchors.py (수정은 scripts/anchor-overrides.json). legs: foot=바닥 가운데, hip=위 장착판 가운데. body: bottom=아랫면 가운데, mount=무기 장착점. weapon: grip=몸통에 닿는 점. scale 은 공통 축척.",
+ "legs_biped_light": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.553,
+   0.12
+  ]
+ },
+ "legs_biped_assault": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.551,
+   0.12
+  ]
+ },
+ "legs_quad_walker": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.513,
+   0.12
+  ]
+ },
+ "legs_quad_siege": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.524,
+   0.12
+  ]
+ },
+ "legs_wheel_scout": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.513,
+   0.12
+  ]
+ },
+ "legs_wheel_heavy": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.533,
+   0.12
+  ]
+ },
+ "legs_track_light": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.517,
+   0.12
+  ]
+ },
+ "legs_track_heavy": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.486,
+   0.12
+  ]
+ },
+ "legs_track_fortress": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.548,
+   0.12
+  ]
+ },
+ "legs_hover": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.497,
+   0.12
+  ]
+ },
+ "legs_hover_heavy": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.5,
+   0.12
+  ]
+ },
+ "legs_flyer": {
+  "scale": 0.3,
+  "foot": [
+   0.5,
+   0.96
+  ],
+  "hip": [
+   0.475,
+   0.12
+  ]
+ },
+ "body_arm_scout": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.9,
+   0.4
+  ]
+ },
+ "body_arm_assault": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.9,
+   0.4
+  ]
+ },
+ "body_arm_light": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.9,
+   0.4
+  ]
+ },
+ "body_arm_medic": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.9,
+   0.4
+  ]
+ },
+ "body_arm_heavy": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.9,
+   0.4
+  ]
+ },
+ "body_turret_bunker": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.5,
+   0.12
+  ]
+ },
+ "body_turret_compact": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.5,
+   0.12
+  ]
+ },
+ "body_turret_siege": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.5,
+   0.12
+  ]
+ },
+ "body_turret_sensor": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.5,
+   0.12
+  ]
+ },
+ "body_shoulder_guard": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.78,
+   0.1
+  ]
+ },
+ "body_shoulder_gunship": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.78,
+   0.1
+  ]
+ },
+ "body_shoulder_platform": {
+  "scale": 0.3,
+  "bottom": [
+   0.5,
+   0.9
+  ],
+  "mount": [
+   0.78,
+   0.1
+  ]
+ },
+ "wpn_arm_gatling": {
+  "scale": 0.3,
+  "grip": [
+   0.911,
+   0.318
+  ]
+ },
+ "wpn_gatling_light": {
+  "scale": 0.3,
+  "grip": [
+   0.907,
+   0.343
+  ]
+ },
+ "wpn_gatling_heavy": {
+  "scale": 0.3,
+  "grip": [
+   0.909,
+   0.52
+  ]
+ },
+ "wpn_laser_light": {
+  "scale": 0.3,
+  "grip": [
+   0.905,
+   0.395
+  ]
+ },
+ "wpn_laser_beam": {
+  "scale": 0.3,
+  "grip": [
+   0.911,
+   0.285
+  ]
+ },
+ "wpn_blade_short": {
+  "scale": 0.3,
+  "grip": [
+   0.911,
+   0.281
+  ]
+ },
+ "wpn_blade_heavy": {
+  "scale": 0.3,
+  "grip": [
+   0.91,
+   0.242
+  ]
+ },
+ "wpn_blade_lance": {
+  "scale": 0.3,
+  "grip": [
+   0.912,
+   0.252
+  ]
+ },
+ "wpn_repair_beam": {
+  "scale": 0.3,
+  "grip": [
+   0.91,
+   0.333
+  ]
+ },
+ "wpn_mortar_hand": {
+  "scale": 0.3,
+  "grip": [
+   0.906,
+   0.261
+  ]
+ },
+ "wpn_turret_cannon": {
+  "scale": 0.3,
+  "grip": [
+   0.097,
+   0.92
+  ]
+ },
+ "wpn_cannon_light": {
+  "scale": 0.3,
+  "grip": [
+   0.552,
+   0.92
+  ]
+ },
+ "wpn_cannon_siege": {
+  "scale": 0.3,
+  "grip": [
+   0.095,
+   0.92
+  ]
+ },
+ "wpn_laser_turret": {
+  "scale": 0.3,
+  "grip": [
+   0.567,
+   0.92
+  ]
+ },
+ "wpn_repair_field": {
+  "scale": 0.3,
+  "grip": [
+   0.565,
+   0.92
+  ]
+ },
+ "wpn_mortar_light": {
+  "scale": 0.3,
+  "grip": [
+   0.57,
+   0.92
+  ]
+ },
+ "wpn_mortar_heavy": {
+  "scale": 0.3,
+  "grip": [
+   0.626,
+   0.92
+  ]
+ },
+ "wpn_shoulder_missile": {
+  "scale": 0.3,
+  "grip": [
+   0.907,
+   0.685
+  ]
+ },
+ "wpn_missile_swarm": {
+  "scale": 0.3,
+  "grip": [
+   0.906,
+   0.665
+  ]
+ },
+ "wpn_missile_heavy": {
+  "scale": 0.3,
+  "grip": [
+   0.906,
+   0.667
+  ]
+ },
+ "wpn_flak_light": {
+  "scale": 0.3,
+  "grip": [
+   0.907,
+   0.624
+  ]
+ },
+ "wpn_flak_burst": {
+  "scale": 0.3,
+  "grip": [
+   0.908,
+   0.547
+  ]
+ },
+ "wpn_flak_missile": {
+  "scale": 0.3,
+  "grip": [
+   0.907,
+   0.749
+  ]
+ },
+ "wpn_repair_drone": {
+  "scale": 0.3,
+  "grip": [
+   0.906,
+   0.624
+  ]
+ }
 }

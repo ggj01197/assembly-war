@@ -99,6 +99,7 @@ export class Battle {
 
   private rng: Rng;
   private nextId = 1;
+  private plan: [number | null, number | null] = [null, null];
   private bots: [boolean, boolean];
   private wattMult: [number, number];
   private maxTicks = (MATCH_SECONDS + OVERTIME_SECONDS) * TICK_HZ;
@@ -160,52 +161,84 @@ export class Battle {
         if (mine.length >= MAX_UNITS_PER_TEAM) continue;
         const enemies = units.filter(u => u.team !== t);
         const enemyAir = enemies.some(u => u.stats.move === 'air');
-        const options = this.decks[t].map((c, i) => ({ c, i })).filter(o => o.c.watt <= watt[t] + 1e-9);
-        if (options.length === 0) continue;
-        const weights = options.map(o => (enemyAir && o.c.stats.target !== 'ground' ? 3 : 1));
-        let r = rng() * weights.reduce((a, b) => a + b, 0), pick = options[0];
-        for (let k = 0; k < options.length; k++) { r -= weights[k]; if (r <= 0) { pick = options[k]; break; } }
+        // 다음에 낼 카드를 먼저 정하고, 와트가 모일 때까지 기다린다 (살 수 있는 걸 바로 사면 값싼 카드만 나가고 비싼 카드는 영영 못 나온다)
+        const w = (c: Prepared) => (c.stats.target === 'air' ? (enemyAir ? 3 : 0.1) : enemyAir && c.stats.target === 'both' ? 3 : 1);
+        let planned = this.plan[t];
+        if (planned !== null && this.decks[t][planned].stats.target === 'air' && !enemyAir) planned = null; // 공중 적이 사라졌으면 계획 철회
+        if (planned === null) {
+          const weights = this.decks[t].map(w);
+          let r = rng() * weights.reduce((x, y) => x + y, 0);
+          planned = 0;
+          for (let k = 0; k < weights.length; k++) { r -= weights[k]; if (r <= 0) { planned = k; break; } }
+          this.plan[t] = planned;
+        }
+        if (this.decks[t][planned].watt > watt[t] + 1e-9) continue;
         // 길: 적이 많은 길을 우선, 동률이면 무작위
         const pressure = [0, 0, 0];
         for (const e of enemies) pressure[e.lane] += 1;
         const mineByLane = [0, 0, 0];
         for (const m of mine) mineByLane[m.lane] += 1;
         const score = pressure.map((p, l) => p - mineByLane[l] + rng() * 0.9);
-        this.spawn(t, pick.i, score.indexOf(Math.max(...score)));
+        if (this.spawn(t, planned, score.indexOf(Math.max(...score)))) this.plan[t] = null;
       }
     }
 
-    // 3. 공격 (피해는 모아 두었다가 동시에 적용)
+    // 3. 공격 (피해는 모아 두었다가 동시에 적용). 치료(repair)는 같은 편 부상자에게 음수 피해로 들어간다.
     const unitDamage = new Map<number, number>();
     const baseDmg: [number, number] = [0, 0];
     for (const u of units) {
       u.cd -= 1;
       if (u.cd > 0) continue;
       const range = u.stats.range * RANGE_UNIT;
+      const rate = Math.max(0.2, u.stats.rate);
+      if (u.stats.family === 'repair') {
+        // 사거리 안에서 체력 비율이 가장 낮은 아군 (자기 자신 제외)
+        let ally: Unit | null = null, low = 1;
+        for (const a of units) {
+          if (a === u || a.team !== u.team || a.lane !== u.lane || a.hp >= a.maxHp) continue;
+          if (Math.abs(a.pos - u.pos) > range) continue;
+          const f = a.hp / a.maxHp;
+          if (f < low || (f === low && ally && a.id < ally.id)) { low = f; ally = a; }
+        }
+        if (ally) {
+          unitDamage.set(ally.id, (unitDamage.get(ally.id) ?? 0) - u.stats.dmg);
+          if (u.stats.splash > 0) {
+            for (const a of units) {
+              if (a === ally || a === u || a.team !== u.team || a.lane !== u.lane || a.hp >= a.maxHp || Math.abs(a.pos - ally.pos) > u.stats.splash) continue;
+              unitDamage.set(a.id, (unitDamage.get(a.id) ?? 0) - u.stats.dmg * SPLASH_MULT);
+            }
+          }
+          this.damageByCard[u.team][u.card] += u.stats.dmg * 0.5; // 치료 기여는 절반으로 쳐서 결과 화면 순위에 반영
+          this.events.push({ type: 'attack', from: u.id, to: ally.id, baseOf: null, lane: u.lane, family: 'repair' });
+          u.cd = Math.round(TICK_HZ / rate);
+        } else u.cd = 0;
+        continue;
+      }
+      const minR = u.stats.minRange * RANGE_UNIT;
       let target: Unit | null = null, best = Infinity;
       for (const e of units) {
         if (e.team === u.team || e.lane !== u.lane || !canHit(u.stats, e.stats)) continue;
         const d = Math.abs(e.pos - u.pos);
-        if (d <= range && (d < best || (d === best && target && e.id < target.id))) { best = d; target = e; }
+        if (d <= range && d >= minR && (d < best || (d === best && target && e.id < target.id))) { best = d; target = e; }
       }
-      const rate = Math.max(0.2, u.stats.rate);
       if (target) {
-        const dealt = Math.max(1, u.stats.dmg * (1 - target.stats.armor / 100));
+        const armor = target.stats.armor * (1 - u.stats.pierce);
+        const dealt = Math.max(1, u.stats.dmg * (1 - armor / 100));
         unitDamage.set(target.id, (unitDamage.get(target.id) ?? 0) + dealt);
         this.damageByCard[u.team][u.card] += dealt;
         this.events.push({ type: 'attack', from: u.id, to: target.id, baseOf: null, lane: u.lane, family: u.stats.family });
-        if (u.stats.family === 'cannon' && target.stats.move === 'ground') {
+        if (u.stats.splash > 0) {
           for (const e of units) {
-            if (e === target || e.team === u.team || e.lane !== u.lane || e.stats.move !== 'ground') continue;
-            if (Math.abs(e.pos - target.pos) <= SPLASH_RADIUS) {
-              const s = Math.max(1, u.stats.dmg * SPLASH_MULT * (1 - e.stats.armor / 100));
-              unitDamage.set(e.id, (unitDamage.get(e.id) ?? 0) + s);
-              this.damageByCard[u.team][u.card] += s;
+            if (e === target || e.team === u.team || e.lane !== u.lane || e.stats.move !== target.stats.move) continue;
+            if (Math.abs(e.pos - target.pos) <= u.stats.splash) {
+              const sp = Math.max(1, u.stats.dmg * SPLASH_MULT * (1 - e.stats.armor * (1 - u.stats.pierce) / 100));
+              unitDamage.set(e.id, (unitDamage.get(e.id) ?? 0) + sp);
+              this.damageByCard[u.team][u.card] += sp;
             }
           }
         }
         u.cd = Math.round(TICK_HZ / rate);
-      } else if (Math.abs(basePos(u.team) - u.pos) <= range) {
+      } else if (Math.abs(basePos(u.team) - u.pos) <= range && Math.abs(basePos(u.team) - u.pos) >= minR && u.stats.target !== 'air') {
         const opp: Team = u.team === 0 ? 1 : 0;
         baseDmg[opp] += u.stats.dmg;
         this.damageByCard[u.team][u.card] += u.stats.dmg;
@@ -217,7 +250,7 @@ export class Battle {
     }
     for (const u of units) {
       const d = unitDamage.get(u.id);
-      if (d) u.hp -= d;
+      if (d) u.hp = Math.min(u.maxHp, u.hp - d);
     }
     baseHp[0] -= baseDmg[0]; baseHp[1] -= baseDmg[1];
     for (const u of units) if (u.hp <= 0) { this.kills[u.team === 0 ? 1 : 0]++; this.events.push({ type: 'die', unit: u.id, team: u.team, lane: u.lane, pos: u.pos }); }
@@ -225,12 +258,18 @@ export class Battle {
 
     // 4. 이동 (공격할 대상·기지가 사거리 안에 없을 때만)
     for (const u of units) {
-      const range = u.stats.range * RANGE_UNIT;
+      const range = u.stats.range * RANGE_UNIT, minR = u.stats.minRange * RANGE_UNIT;
       let engaged = false;
-      for (const e of units) {
-        if (e.team !== u.team && e.lane === u.lane && canHit(u.stats, e.stats) && Math.abs(e.pos - u.pos) <= range) { engaged = true; break; }
+      if (u.stats.family === 'repair') {
+        engaged = units.some(a => a !== u && a.team === u.team && a.lane === u.lane && a.hp < a.maxHp && Math.abs(a.pos - u.pos) <= range);
+      } else {
+        for (const e of units) {
+          const d = Math.abs(e.pos - u.pos);
+          if (e.team !== u.team && e.lane === u.lane && canHit(u.stats, e.stats) && d <= range && d >= minR) { engaged = true; break; }
+        }
+        const bd = Math.abs(basePos(u.team) - u.pos);
+        if (!engaged && bd <= range && bd >= minR && u.stats.target !== 'air') engaged = true;
       }
-      if (!engaged && Math.abs(basePos(u.team) - u.pos) <= range) engaged = true;
       if (!engaged) u.pos = Math.min(LANE_LEN, Math.max(0, u.pos + (u.team === 0 ? 1 : -1) * u.stats.speed * SPEED_UNIT / TICK_HZ));
     }
 
