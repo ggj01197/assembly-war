@@ -48,6 +48,8 @@ export interface BattleResult {
 
 export interface Unit {
   id: number; team: Team; lane: number; pos: number;
+  /** 직전 틱의 위치·이동 여부 — 화면이 20Hz 틱 사이를 매끄럽게 이을 때만 쓴다(규칙과 무관) */
+  prev: number; moving: boolean;
   hp: number; maxHp: number; stats: UnitStats; cd: number; card: number;
 }
 
@@ -125,7 +127,7 @@ export class Battle {
     if (card.watt > this.watt[team] + 1e-9) return false;
     if (this.units.filter(u => u.team === team).length >= MAX_UNITS_PER_TEAM) return false;
     this.watt[team] -= card.watt;
-    const u: Unit = { id: this.nextId++, team, lane, pos: team === 0 ? 0 : LANE_LEN, hp: card.stats.hp, maxHp: card.stats.hp, stats: card.stats, cd: 0, card: cardIdx };
+    const u: Unit = { id: this.nextId++, team, lane, pos: team === 0 ? 0 : LANE_LEN, prev: team === 0 ? 0 : LANE_LEN, moving: false, hp: card.stats.hp, maxHp: card.stats.hp, stats: card.stats, cd: 0, card: cardIdx };
     this.units.push(u);
     this.spawned[team]++; this.spawnsByCard[team][cardIdx]++;
     this.events.push({ type: 'spawn', unit: u.id, team, lane });
@@ -270,7 +272,8 @@ export class Battle {
         const bd = Math.abs(basePos(u.team) - u.pos);
         if (!engaged && bd <= range && bd >= minR && u.stats.target !== 'air') engaged = true;
       }
-      if (!engaged) u.pos = Math.min(LANE_LEN, Math.max(0, u.pos + (u.team === 0 ? 1 : -1) * u.stats.speed * SPEED_UNIT / TICK_HZ));
+      u.prev = u.pos; u.moving = false;
+      if (!engaged) { u.pos = Math.min(LANE_LEN, Math.max(0, u.pos + (u.team === 0 ? 1 : -1) * u.stats.speed * SPEED_UNIT / TICK_HZ)); u.moving = u.pos !== u.prev; }
     }
 
     // 5. 중앙 거점 점유

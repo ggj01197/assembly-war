@@ -1,10 +1,11 @@
 # 무작위 조립 가능 조합을 한 장에 합성해 눈으로 점검한다 (R-01: 60종 확장 일관성).
 #   python scripts/combo-grid.py <출력.png> [개수=60] [시드=1] [열=10]
 import sys, os, json, random
+BACK = len(sys.argv) > 5 and sys.argv[5] == 'back'   # 5번째 인자 back → 뒷모습 세트
 from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 parts = json.load(open(os.path.join(ROOT, 'src/data/parts.json'), encoding='utf-8'))
-A = json.load(open(os.path.join(ROOT, 'src/data/parts-anchors.json'), encoding='utf-8'))
+A = json.load(open(os.path.join(ROOT, 'src/data/parts-anchors-back.json' if BACK else 'src/data/parts-anchors.json'), encoding='utf-8'))
 by = {p['id']: p for p in parts}
 legs = [p for p in parts if p['kind'] == 'legs']; bodies = [p for p in parts if p['kind'] == 'body']; weps = [p for p in parts if p['kind'] == 'weapon']
 
@@ -22,7 +23,7 @@ CELL = 200
 rows = (len(picks) + COLS - 1) // COLS
 sheet = Image.new('RGBA', (CELL * COLS, CELL * rows), (24, 34, 52, 255))
 def load(pid):
-    im = Image.open(os.path.join(ROOT, 'public/sprites/parts', pid + '.png')).convert('RGBA'); s = A[pid]['scale'] * 0.8
+    im = Image.open(os.path.join(ROOT, 'public/sprites/parts_back' if BACK else 'public/sprites/parts', pid + '.png')).convert('RGBA'); s = A[pid]['scale'] * 0.8
     return im.resize((int(im.width * s), int(im.height * s)), Image.LANCZOS)
 def put(c, im, x, y, ax, ay): c.alpha_composite(im, (int(x - im.width * ax), int(y - im.height * ay)))
 for i, (l, b, w) in enumerate(picks):
