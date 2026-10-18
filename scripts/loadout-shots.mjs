@@ -1,0 +1,48 @@
+// 스킬·영웅 화면 점검: 격납고 장비 시트 → 전투에서 영웅 출격·이동·기술, 스킬 사용 (개발 서버 5190 필요)
+//   node scripts/loadout-shots.mjs [폭=390] [높이=844]
+import { chromium } from 'playwright-core';
+import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const W = Number(process.argv[2] ?? 390), H = Number(process.argv[3] ?? 844);
+const OUT = fileURLToPath(new URL('../../00_PROJECT_CONTROL/shots/', import.meta.url));
+mkdirSync(OUT, { recursive: true });
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+const errors = [];
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
+// 레벨을 올려 전부 열린 상태로 본다
+await page.evaluate(() => window.__aw.store.setState(s => ({ save: { ...s.save, commanderExp: 4000 } })));
+await page.click('#hgGear'); await page.waitForTimeout(500);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_1_gear.png` });
+await page.locator('.gear-hero[data-id="hero_sniper"]').click(); await page.locator('.gear-skill[data-id="sk_slow"]').click(); await page.waitForTimeout(200);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_2_gear_picked.png` });
+await page.click('#sheetClose'); await page.waitForTimeout(200);
+await page.evaluate(() => window.__aw.store.setState(s => ({ save: { ...s.save, loadout: { skills: ['sk_bomb', 'sk_repair'], hero: 'hero_vanguard' } } })));
+await page.evaluate(() => window.__aw.startBattle('c1-3'));
+await page.waitForSelector('.screen.battle:not([hidden])');
+const cards = await page.locator('.card[data-i]').all();
+const lane = async (l, y = H - 280) => page.mouse.click(((l + 0.5) / 3) * W * 0.9 + W * 0.05, y);
+await page.waitForTimeout(2500);
+await page.click('#btHeroBtn'); await page.waitForTimeout(150);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_3_hero_select.png` });
+await lane(1); await page.waitForTimeout(700);
+await cards[0].click(); await lane(0); await page.waitForTimeout(100);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_4_hero_spawn.png` });
+await page.waitForTimeout(5000);
+await page.click('#btHeroSkill'); await page.waitForTimeout(180);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_5_hero_skill.png` });
+await page.click('#btHeroBtn'); await page.waitForTimeout(100); await lane(2, H / 2); await page.waitForTimeout(600);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_6_hero_move.png` });
+await page.waitForTimeout(3500);
+await page.locator('.card.skill[data-skill="0"]').click(); await page.waitForTimeout(150);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_7_bomb_select.png` });
+await lane(1, H / 2); await page.waitForTimeout(250);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_8_bomb.png` });
+await page.waitForTimeout(2000);
+await page.screenshot({ path: `${OUT}/${W}x${H}_g_9_after.png` });
+console.log('errors', errors.length, errors.slice(0, 5));
+await browser.close();

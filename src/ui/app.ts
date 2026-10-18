@@ -11,6 +11,7 @@ import { mountHangar } from './hangar';
 import { mountAssembly } from './assembly';
 import { mountResult, type ResultData } from './result';
 import { BattleHud } from './battleHud';
+import { commanderLevel } from '../domain/save';
 
 export interface Screen { el: HTMLElement; show(arg?: unknown): void; hide(): void }
 export interface Nav {
@@ -49,7 +50,11 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     const s = store.getState().save;
     const player: Deck = { cards: s.deck.map(build => ({ build, level: 1 })) };
     const enemy: Deck = { cards: stage.enemy.map(build => ({ build, level: stage.enemyLevel })) };
-    const battle = new Battle(player, enemy, PARTS, (Date.now() & 0x7fffffff) >>> 0, { bots: [false, true], wattMult: [1, stage.enemyWattMult] });
+    const battle = new Battle(player, enemy, PARTS, (Date.now() & 0x7fffffff) >>> 0, {
+      bots: [false, true], wattMult: [1, stage.enemyWattMult],
+      skills: [s.loadout.skills, stage.enemySkills ?? []], heroes: [s.loadout.hero, stage.enemyHero ?? null],
+      heroLevel: [commanderLevel(s.commanderExp).level, stage.enemyLevel],
+    });
     if (current) screens[current].hide();
     current = null;
     playMusic('battle');

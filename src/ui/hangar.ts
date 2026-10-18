@@ -1,7 +1,8 @@
 import { assemble, type Build } from '../domain/assemble';
 import { PARTS } from '../data/parts';
 import { STAGES, isUnlocked } from '../data/stages';
-import { store } from '../game/store';
+import { store, update } from '../game/store';
+import { SKILLS, HEROES, KIND_LABEL, heroById } from '../domain/loadout';
 import { commanderLevel } from '../domain/save';
 import { levelMultiplier } from '../domain/upgrade';
 import { unitFit, partName, esc, TARGET_LABEL } from './unitView';
@@ -13,7 +14,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
   const el = document.createElement('div');
   el.className = 'screen hangar'; el.hidden = true;
   root.appendChild(el);
-  let sel = 0, sheet = false;
+  let sel = 0, sheet: false | 'stage' | 'gear' = false;
 
   const slotTitle = (b: Build) => partName(b.weapon);
 
@@ -50,17 +51,57 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </section>
       <footer class="hg-actions">
         <button class="btn ${guideAssemble ? 'pulse' : ''}" id="hgAssemble" type="button">조립${guideAssemble ? '<em>NEW</em>' : ''}</button>
+        <button class="btn" id="hgGear" type="button">장비</button>
         <button class="btn primary big ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button">출격</button>
       </footer>
       ${guideAssemble ? '<div class="hg-tip">첫 승리! 설계도를 바꿔 더 강해져 보세요.</div>' : ''}
-      ${sheet ? stageSheet() : ''}`;
+      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : ''}`;
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });
     (el.querySelector('#hgAssemble') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openAssembly(sel); };
-    (el.querySelector('#hgSortie') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = true; render(); };
+    (el.querySelector('#hgSortie') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'stage'; render(); };
+    (el.querySelector('#hgGear') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'gear'; render(); };
+    el.querySelectorAll<HTMLButtonElement>('.gear-hero:not(.locked)').forEach(b2 => b2.onclick = () => { play('uiClick'); update(sv => { sv.loadout.hero = b2.dataset.id!; }); render(); });
+    el.querySelectorAll<HTMLButtonElement>('.gear-skill:not(.locked)').forEach(b2 => b2.onclick = () => {
+      play('uiClick');
+      update(sv => {
+        const id = b2.dataset.id!, cur = sv.loadout.skills;
+        if (cur.includes(id)) { if (cur.length > 1) sv.loadout.skills = cur.filter(x => x !== id); }   // 최소 1개는 남긴다
+        else sv.loadout.skills = [...cur, id].slice(-2);                                             // 3번째를 고르면 먼저 고른 것이 빠진다
+      });
+      render();
+    });
     el.querySelector('#sheetClose')?.addEventListener('click', () => { play('uiBack'); sheet = false; render(); });
     el.querySelector('.sheet-dim')?.addEventListener('click', () => { sheet = false; render(); });
-    el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
+    el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked):not(.gear-hero):not(.gear-skill)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
+  }
+
+  /** 출격 장비: 영웅 1명 + 스킬 2개. 사령관 레벨이 올라야 열리는 것이 있다. */
+  function gearSheet(): string {
+    const s = store.getState().save, lv = commanderLevel(s.commanderExp).level, lo = s.loadout;
+    return `<div class="sheet-dim"></div>
+      <div class="sheet" role="dialog" aria-label="출격 장비">
+        <div class="sheet-head"><b>출격 장비</b><button id="sheetClose" type="button" aria-label="닫기">✕</button></div>
+        <div class="stage-list">
+          <h3 class="gear-h">영웅 (1명 · 와트 6 · 탭으로 길 이동 지시)</h3>
+          ${HEROES.map(h => {
+            const open = h.unlock <= lv;
+            return `<button class="stage gear-hero ${open ? '' : 'locked'} ${lo.hero === h.id ? 'picked' : ''}" data-id="${h.id}" type="button" ${open ? '' : 'disabled'}>
+              <span class="uf">${unitFit(h.build, 44, 50)}</span>
+              <span class="tx"><b>${esc(h.name)} <em>${esc(h.role)}</em></b><small>${esc(h.skill.name)}: ${esc(h.skill.desc)}</small></span>
+              <span class="rw">${lo.hero === h.id ? '<em>✓ 선택</em>' : open ? '' : `Lv.${h.unlock}`}</span>
+            </button>`; }).join('')}
+          <h3 class="gear-h">스킬 (2개 · 쿨다운 20초)</h3>
+          ${SKILLS.map(k => {
+            const open = k.unlock <= lv, on = lo.skills.includes(k.id);
+            return `<button class="stage gear-skill ${open ? '' : 'locked'} ${on ? 'picked' : ''}" data-id="${k.id}" type="button" ${open ? '' : 'disabled'}>
+              <i class="no">${k.watt}</i>
+              <span class="tx"><b>${esc(k.name)} <em>${KIND_LABEL[k.kind]}</em></b><small>${esc(k.desc)}</small></span>
+              <span class="rw">${on ? '<em>✓ 장착</em>' : open ? '' : `Lv.${k.unlock}`}</span>
+            </button>`; }).join('')}
+        </div>
+        <p class="gear-note">${esc(heroById(lo.hero)?.name ?? '')} 출격 · 스킬 ${lo.skills.length}/2 — 전투 중 카드 줄의 보라색 칸이 스킬, 오른쪽 금색 버튼이 영웅입니다.</p>
+      </div>`;
   }
 
   function stageSheet(): string {

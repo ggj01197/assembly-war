@@ -4,6 +4,7 @@ import { layoutUnit, spriteUrl, spriteUrlBack } from '../unitLayout';
 import { PARTS } from '../../data/parts';
 import { play } from '../../native/audio';
 import type { BattleHud } from '../../ui/battleHud';
+import { skillById, heroById, HERO_WATT, HERO_MOVE_SEC } from '../../domain/loadout';
 import type { Stage } from '../../data/stages';
 
 /**
@@ -19,7 +20,7 @@ interface View {
   shadow: Phaser.GameObjects.Ellipse; imgs: Phaser.GameObjects.Image[];
   unit: Unit; w: number; h: number; lift: number; kind: Move; face: 1 | -1;
   ph: number; mv: number; born: number; landed: boolean; recoil: number; lunge: number; flash: number; hpShow: number; shake: number;
-  lastX: number; lastY: number; foot: number; dying: number; tinted: boolean; lastHp: number; recoilK?: number;
+  lastX: number; lastY: number; foot: number; dying: number; tinted: boolean; lastHp: number; recoilK?: number; k: number; hero: boolean;
 }
 type FxKind = 'tracer' | 'blast' | 'puff' | 'ring' | 'flash' | 'spark' | 'dust' | 'debris';
 interface Fx { kind: FxKind; x1: number; y1: number; x2: number; y2: number; t: number; dur: number; color: number; r: number }
@@ -65,6 +66,8 @@ export class BattleScene extends Phaser.Scene {
   private groundG!: Phaser.GameObjects.Graphics;
   private acc = 0;
   private selected: number | null = null;
+  private selSkill: number | null = null;
+  private selHero = false;
   private ended = false;
   private baseFlash: [number, number] = [0, 0];
   private pointPulse = 0;
@@ -79,7 +82,7 @@ export class BattleScene extends Phaser.Scene {
   constructor() { super('battle'); }
 
   init(cfg: BattleConfig) {
-    this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.ended = false;
+    this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
     this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hoverLane = -1;
   }
 
@@ -94,7 +97,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
-    this.cfg.hud.setup(this.cfg.stage, this.cfg.battle, { onSelect: i => { this.selected = this.selected === i ? null : i; }, onQuit: () => { if (!this.ended) { this.ended = true; this.cfg.onQuit(); } } });
+    this.cfg.hud.setup(this.cfg.stage, this.cfg.battle, {
+      onSelect: i => { this.selected = this.selected === i ? null : i; this.selSkill = null; this.selHero = false; },
+      onSkill: slot => this.pickSkill(slot), onHero: () => this.pickHero(), onHeroSkill: () => this.heroSkill(),
+      onQuit: () => { if (!this.ended) { this.ended = true; this.cfg.onQuit(); } },
+    });
     this.layout();
     this.laneG = this.add.graphics().setDepth(5);
     this.groundG = this.add.graphics().setDepth(6);
@@ -157,9 +164,56 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ───────── 입력 ─────────
+  private clearSel() { this.selected = null; this.selSkill = null; this.selHero = false; }
+
+  private pickSkill(slot: number) {
+    if (this.ended) return;
+    const b = this.cfg.battle, hud = this.cfg.hud, d = skillById(b.skillIds[0][slot] ?? ''); if (!d) return;
+    const cd = b.skillCd[0][slot];
+    if (cd > 0) { hud.toast(`${d.name}: 다시 쓰려면 ${Math.ceil(cd / TICK_HZ)}초`); play('deny'); return; }
+    if (d.watt > b.watt[0] + 1e-9) { hud.toast('와트가 부족해요. 조금 기다리세요.'); play('deny'); return; }
+    if (!d.needsLane) { this.clearSel(); if (b.castSkill(0, slot)) play('uiClick'); return; }
+    const on = this.selSkill === slot; this.clearSel();
+    if (!on) { this.selSkill = slot; hud.toast(`${d.name}: 적이 몰린 길을 눌러 주세요.`); play('uiClick'); }
+  }
+
+  private pickHero() {
+    if (this.ended) return;
+    const b = this.cfg.battle, hud = this.cfg.hud, hs = b.hero[0]; if (!hs) return;
+    const u = b.heroUnit(0);
+    if (!u) {
+      if (hs.respawn > 0) { hud.toast(`${hs.def.name}: ${Math.ceil(hs.respawn / TICK_HZ)}초 뒤에 다시 출격할 수 있어요.`); play('deny'); return; }
+      if (b.watt[0] + 1e-9 < HERO_WATT) { hud.toast(`영웅 출격은 와트 ${HERO_WATT} 이 필요해요.`); play('deny'); return; }
+    } else if (u.ghost > 0 || u.moveCd > 0) { hud.toast('영웅이 이동 중이에요. 잠시 뒤에 다시 지시하세요.'); play('deny'); return; }
+    const on = this.selHero; this.clearSel();
+    if (!on) { this.selHero = true; hud.toast(u ? '영웅을 옮길 길을 눌러 주세요.' : '영웅이 출격할 길을 눌러 주세요.'); play('uiClick'); }
+  }
+
+  private heroSkill() {
+    if (this.ended) return;
+    const b = this.cfg.battle, hud = this.cfg.hud, hs = b.hero[0]; if (!hs) return;
+    const u = b.heroUnit(0);
+    if (!u) { hud.toast('영웅이 출격해 있어야 기술을 쓸 수 있어요.'); play('deny'); return; }
+    if (hs.skillCd > 0) { hud.toast(`${hs.def.skill.name}: ${Math.ceil(hs.skillCd / TICK_HZ)}초 뒤에 쓸 수 있어요.`); play('deny'); return; }
+    if (!b.castHeroSkill(0)) { hud.toast('지금은 쓸 수 없어요.'); play('deny'); }
+  }
+
   private onTap(x: number, y: number) {
     if (this.ended) return;
     const b = this.cfg.battle, hud = this.cfg.hud;
+    if (this.selSkill !== null) {
+      if (b.castSkill(0, this.selSkill, this.laneAt(x, y))) this.selSkill = null; else { play('deny'); hud.toast('지금은 쓸 수 없어요.'); }
+      return;
+    }
+    if (this.selHero) {
+      const lane = this.laneAt(x, y), u = b.heroUnit(0);
+      if (!u) {
+        if (y < (this.y0 + this.y1) / 2) { hud.toast('아군 진영(아래쪽)의 길을 눌러 주세요.'); play('deny'); return; }
+        if (b.deployHero(0, lane)) this.selHero = false; else { play('deny'); hud.toast('지금은 출격할 수 없어요.'); }
+      } else if (b.heroMove(0, lane)) { this.selHero = false; play('uiClick'); }
+      else { play('deny'); hud.toast(u.lane === lane ? '영웅이 이미 그 길에 있어요.' : '지금은 옮길 수 없어요.'); }
+      return;
+    }
     if (this.selected === null) { hud.toast('아래 카드를 먼저 눌러 고르세요.'); play('deny'); return; }
     if (y < (this.y0 + this.y1) / 2) { hud.toast('아군 진영(아래쪽)의 길을 눌러 주세요.'); play('deny'); return; }
     const lane = this.laneAt(x, y);
@@ -186,7 +240,7 @@ export class BattleScene extends Phaser.Scene {
     const alpha = this.ended ? 1 : clamp(this.acc / stepMs, 0, 1);
     this.sync(b, delta, alpha);
     this.draw(b, delta);
-    this.cfg.hud.update(b, this.selected);
+    this.cfg.hud.update(b, { card: this.selected, skill: this.selSkill, hero: this.selHero });
     // 와트가 가득 차면(낭비되기 직전) 한 번 알려 준다
     if (b.watt[0] >= 9.99 && !this.wattFull) { this.wattFull = true; play('ready'); } else if (b.watt[0] < 9) this.wattFull = false;
   }
@@ -245,9 +299,55 @@ export class BattleScene extends Phaser.Scene {
         this.fx.push({ kind: 'ring', x1: x, y1: y + 10 * s, x2: x, y2: y + 10 * s, t: 0, dur: 0.4, color: 0xffd7a0, r: 40 * s });
         play('boom', 110);
         if (!calm) this.cameras.main.shake(50, 0.0015);
+      } else if (e.type === 'skill') {
+        this.skillFx(e);
       } else if (e.type === 'point') {
         this.pointPulse = 1;
         if (e.controller === 0) play('pointCapture');
+      }
+    }
+  }
+
+  /** 스킬·영웅 기술 연출 (효과 자체는 sim 이 한다) */
+  private skillFx(e: Extract<BattleEvent, { type: 'skill' }>) {
+    const b = this.cfg.battle, calm = this.cfg.reducedMotion;
+    const pulse = (team: 0 | 1, color: number, r = 30, delay = 0) => {
+      for (const v of this.views.values()) if (v.unit.team === team) this.fx.push({ kind: 'ring', x1: v.c.x, y1: v.c.y, x2: v.c.x, y2: v.c.y - 12 * v.c.scaleX, t: -delay, dur: 0.5, color, r: r * v.c.scaleX });
+    };
+    const opp: 0 | 1 = e.team === 0 ? 1 : 0;
+    switch (e.skill) {
+      case 'sk_bomb':
+        for (let i = 0; i < 9; i++) { const pos = 8 + i * 11, t = this.tOf(pos), s = this.scaleAt(t); this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: this.laneXAt(e.lane, t) + (i % 2 ? 8 : -8), y2: this.posToY(pos), t: -i * 0.05, dur: 0.42, color: 0xff9f43, r: 30 * s }); this.fx.push({ kind: 'spark', x1: 0, y1: 0, x2: this.laneXAt(e.lane, t), y2: this.posToY(pos), t: -i * 0.05, dur: 0.3, color: 0xfff3b0, r: 18 * s }); }
+        play('cannon'); play('boom', 0); if (!calm) this.cameras.main.shake(160, 0.006); break;
+      case 'sk_overload': pulse(e.team, 0xffb347, 34); play('ready'); break;
+      case 'sk_shield': this.baseFlash[e.team] = 1; this.fx.push({ kind: 'ring', x1: this.W / 2, y1: this.baseY(e.team), x2: this.W / 2, y2: this.baseY(e.team), t: 0, dur: 0.6, color: 0x7fe8ff, r: this.W * 0.35 }); play('ready'); break;
+      case 'sk_repair': pulse(e.team, 0x6fe39a, 34); play('repair'); break;
+      case 'sk_slow': pulse(opp, 0x7fe8ff, 34); play('laser'); break;
+      case 'sk_armor': pulse(opp, 0xff6b6b, 34); play('laser'); break;
+      case 'sk_strike': {
+        const y = this.baseY(opp), x = this.W / 2;
+        this.fx.push({ kind: 'tracer', x1: x, y1: this.y0 - 200, x2: x, y2: y, t: 0, dur: 0.25, color: 0xff7a45, r: 9 });
+        this.fx.push({ kind: 'blast', x1: x, y1: y, x2: x, y2: y, t: 0.18, dur: 0.5, color: 0xffa94d, r: 70 });
+        this.baseFlash[opp] = 1; play('mortar'); if (!calm) this.cameras.main.shake(180, 0.007); break;
+      }
+      case 'sk_charge': this.fx.push({ kind: 'ring', x1: this.W / 2, y1: this.baseY(e.team), x2: this.W / 2, y2: this.baseY(e.team), t: 0, dur: 0.6, color: 0xffd067, r: this.W * 0.3 }); play('pointCapture'); break;
+      case 'hero_vanguard': {
+        const v = e.unit !== null ? this.views.get(e.unit) : undefined; if (!v) break;
+        this.fx.push({ kind: 'ring', x1: v.c.x, y1: v.c.y, x2: v.c.x, y2: v.c.y, t: 0, dur: 0.45, color: 0xffe08a, r: 46 * v.c.scaleX });
+        const u = b.units.find(q => q.id === e.unit); if (u) { const t = this.tOf(u.pos); this.fx.push({ kind: 'tracer', x1: v.c.x, y1: v.c.y, x2: this.laneXAt(u.lane, t), y2: this.posToY(u.pos), t: 0, dur: 0.3, color: 0xffe08a, r: 8 }); this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: this.laneXAt(u.lane, t), y2: this.posToY(u.pos) - 20 * this.scaleAt(t), t: 0.05, dur: 0.4, color: 0xffd067, r: 38 * this.scaleAt(t) }); }
+        play('blade'); if (!calm) this.cameras.main.shake(120, 0.005); break;
+      }
+      case 'hero_sniper': {
+        const h = e.unit !== null ? b.units.find(q => q.id === e.unit) : undefined, v = e.unit !== null ? this.views.get(e.unit) : undefined; if (!h || !v) break;
+        const foes = b.units.filter(q => q.team !== h.team && q.lane === h.lane && q.ghost === 0).sort((a, c) => Math.abs(a.pos - h.pos) - Math.abs(c.pos - h.pos)).slice(0, 4);
+        foes.forEach((q, i) => { const t = this.tOf(q.pos), s = this.scaleAt(t), x = this.laneXAt(q.lane, t), y = this.posToY(q.pos) - 28 * s; this.fx.push({ kind: 'tracer', x1: v.c.x, y1: v.c.y - 44 * v.c.scaleX, x2: x, y2: y, t: -i * 0.07, dur: 0.2, color: 0xb8f7ff, r: 5 }); this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: x, y2: y, t: -i * 0.07 + 0.1, dur: 0.3, color: 0x8fe9ff, r: 22 * s }); });
+        play('laser'); break;
+      }
+      case 'hero_medic': {
+        const h = e.unit !== null ? b.units.find(q => q.id === e.unit) : undefined; if (!h) break;
+        for (const v of this.views.values()) if (v.unit.team === h.team && v.unit.lane === h.lane) this.fx.push({ kind: 'ring', x1: v.c.x, y1: v.c.y, x2: v.c.x, y2: v.c.y - 10 * v.c.scaleX, t: 0, dur: 0.55, color: 0x6fe39a, r: 34 * v.c.scaleX });
+        this.fx.push({ kind: 'ring', x1: this.W / 2, y1: this.baseY(h.team), x2: this.W / 2, y2: this.baseY(h.team), t: 0.1, dur: 0.6, color: 0x7fe8ff, r: this.W * 0.3 });
+        play('repair'); break;
       }
     }
   }
@@ -267,13 +367,15 @@ export class BattleScene extends Phaser.Scene {
       const x = this.laneXAt(u.lane, t), y = this.posToY(pos);
       const moved = Math.hypot(x - v.lastX, y - v.lastY);
       if (v.lastX === 0 && v.lastY === 0) { v.lastX = x; v.lastY = y; }
-      v.c.setPosition(x, y); v.c.setScale(this.scaleAt(t)); v.c.setDepth(y);
+      let px = x;
+      if (u.ghost > 0) { const total = Math.round(HERO_MOVE_SEC * TICK_HZ); const pr = clamp(1 - u.ghost / total, 0, 1), ez = pr * pr * (3 - 2 * pr); px = lerp(x, this.laneXAt(u.toLane, t), ez); v.c.setAlpha(0.35); if (!calm && Math.random() < 0.5 && this.fx.length < 90) this.fx.push({ kind: 'dust', x1: px, y1: y, x2: px, y2: y, t: 0, dur: 0.35, color: 0xffe08a, r: 8 * this.scaleAt(t) }); }
+      v.c.setPosition(px, y); v.c.setScale(this.scaleAt(t) * v.k); v.c.setDepth(y);
       const mvTarget = u.moving ? 1 : 0;
       v.mv += (mvTarget - v.mv) * Math.min(1, dt * 9);
       const stride = Math.max(18, v.w * 0.42);
       v.ph += (moved / this.scaleAt(t)) / stride * Math.PI;
-      v.lastX = x; v.lastY = y;
-      this.animateView(v, dt, now, amp, calm);
+      v.lastX = px; v.lastY = y;
+      this.animateView(v, dt, now, amp, calm, u.ghost > 0);
       if (u.hp < v.lastHp) v.hpShow = Math.max(v.hpShow, 1.4);
       v.lastHp = u.hp;
     }
@@ -290,13 +392,13 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private animateView(v: View, dt: number, now: number, amp: number, calm: boolean) {
+  private animateView(v: View, dt: number, now: number, amp: number, calm: boolean, transit = false) {
     const h = v.h, id = v.unit.id;
     const age = now - v.born;
     // 소환: 위에서 내려앉으며 나타난다 (착지 때 먼지 + 눌림)
     const sp = clamp(age / 0.4, 0, 1), e = 1 - Math.pow(1 - sp, 3);
     const drop = calm ? 0 : -(1 - e) * (v.face === 1 ? 90 : 55);
-    v.c.setAlpha(Math.min(1, age / 0.22));
+    if (!transit) v.c.setAlpha(Math.min(1, age / 0.22));
     if (sp >= 1 && !v.landed) {
       v.landed = true;
       if (!calm) { this.fx.push({ kind: 'dust', x1: v.c.x - 10, y1: v.c.y, x2: v.c.x - 10, y2: v.c.y, t: 0, dur: 0.5, color: 0xaab4c4, r: 12 * v.c.scaleX }); this.fx.push({ kind: 'dust', x1: v.c.x + 10, y1: v.c.y, x2: v.c.x + 10, y2: v.c.y, t: 0.04, dur: 0.5, color: 0xaab4c4, r: 12 * v.c.scaleX }); }
@@ -342,12 +444,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private makeView(u: Unit): View {
-    const build = this.cfg.battle.decks[u.team][u.card].build;
+    const hd = u.hero ? heroById(u.hero) : undefined;
+    const build = hd ? hd.build : this.cfg.battle.decks[u.team][u.card].build;
     const face: 1 | -1 = u.team === 0 ? 1 : -1;
     const L = layoutUnit(build, this.k, face === 1)!;
     const air = u.stats.move === 'air';
     const lift = air ? 20 * (this.k / 0.6) : 0;
-    const ringColor = u.team === 0 ? 0x5fd3ff : 0xff7a45;
+    const ringColor = hd ? 0xffd067 : u.team === 0 ? 0x5fd3ff : 0xff7a45;
     const shadow = this.add.ellipse(0, -1, L.w * 0.9, Math.max(8, L.w * 0.24), 0x000000, 0.35);
     const ring = this.add.ellipse(0, -1, L.w * 0.72, Math.max(6, L.w * 0.18), ringColor, 0.12).setStrokeStyle(1.5, ringColor, 0.85);
     const imgs: Phaser.GameObjects.Image[] = [];
@@ -362,7 +465,7 @@ export class BattleScene extends Phaser.Scene {
     return {
       c, rig, legsC, upper, shadow, imgs, unit: u, w: L.w, h: L.h, lift, kind: moveKind(build.legs, air), face,
       ph: Math.random() * 6, mv: 0, born: this.time.now / 1000, landed: false, recoil: 0, lunge: 0, flash: 0, hpShow: 0, shake: 0,
-      lastX: 0, lastY: 0, foot: 0, dying: -1, tinted: false, lastHp: u.hp,
+      lastX: 0, lastY: 0, foot: 0, dying: -1, tinted: false, lastHp: u.hp, k: hd ? hd.scale : 1, hero: !!hd,
     } as View;
   }
 
@@ -393,6 +496,16 @@ export class BattleScene extends Phaser.Scene {
     const lg = this.laneG; lg.clear();
     const gg = this.groundG; gg.clear();
     const g = this.fxG; g.clear();
+    // 스킬·영웅 지정: 길 전체가 색을 띤다 (폭격 = 붉게, 영웅 = 금색)
+    if ((this.selSkill !== null || this.selHero) && !this.ended) {
+      const pulse = 0.5 + 0.5 * Math.sin(now * 5), u = this.cfg.battle.heroUnit(0);
+      const deploy = this.selHero && !u, col = this.selSkill !== null ? 0xff7a45 : 0xffd067;
+      for (let l = 0; l < LANES; l++) {
+        if (this.selHero && u && u.lane === l) continue;
+        const hot = this.hoverLane === l;
+        this.quad(lg, l, 0, deploy ? 0.5 : 1, (hot ? 0.22 : 0.1) + 0.06 * pulse, hot ? 0.95 : 0.45, col);
+      }
+    }
     // 길 안내: 카드를 고르면 내 진영의 길이 빛난다
     if (this.selected !== null && !this.ended) {
       const pulse = 0.5 + 0.5 * Math.sin(now * 4);
@@ -428,12 +541,24 @@ export class BattleScene extends Phaser.Scene {
         gg.strokePath();
       }
     }
-    // 체력 막대: 맞았거나 다친 유닛만 (화면 정리)
+    // 지속 효과 표시: 내 기지 보호막 · 유닛 발밑 고리
+    for (const t of [0, 1] as const) {
+      if (b.eff.shield[t] > 0) { const y = this.baseY(t), hw = t === 0 ? this.W * 0.5 : this.W * 0.3; gg.lineStyle(3, 0x7fe8ff, 0.5 + 0.3 * Math.sin(now * 6)); gg.strokeEllipse(this.W / 2, y, hw * 2, 46); gg.fillStyle(0x7fe8ff, 0.1); gg.fillEllipse(this.W / 2, y, hw * 2, 46); }
+    }
     for (const v of this.views.values()) {
-      if (v.unit.hp >= v.unit.maxHp && v.hpShow <= 0) continue;
+      const t = v.unit.team, s = v.c.scaleX, ry = Math.max(5, v.w * 0.09) * s;
+      const ring = (color: number, grow: number) => { gg.lineStyle(2, color, 0.7 + 0.25 * Math.sin(now * 8 + v.unit.id)); gg.strokeEllipse(v.c.x, v.c.y - 1, v.w * s * (0.9 + grow), ry * 2 * (1 + grow)); };
+      if (b.eff.overload[t] > 0) ring(0xffb347, 0);
+      if (b.eff.slow[t] > 0) ring(0x7fe8ff, 0.12);
+      if (b.eff.armorDown[t] > 0) ring(0xff6b6b, 0.24);
+    }
+    // 체력 막대: 맞았거나 다친 유닛(영웅은 항상)
+    for (const v of this.views.values()) {
+      if (v.unit.hp >= v.unit.maxHp && v.hpShow <= 0 && !v.hero) continue;
       const s = v.c.scaleX, w = Math.max(26, v.w * 0.8) * s, x = v.c.x - w / 2, y = v.c.y - (v.h + v.lift) * s - 7;
       g.fillStyle(0x000000, 0.65); g.fillRect(x - 1, y - 1, w + 2, 6);
-      g.fillStyle(v.unit.team === 0 ? 0x6fe39a : 0xff7a45, 1); g.fillRect(x, y, w * Math.max(0, v.unit.hp / v.unit.maxHp), 4);
+      g.fillStyle(v.hero ? 0xffd067 : v.unit.team === 0 ? 0x6fe39a : 0xff7a45, 1); g.fillRect(x, y, w * Math.max(0, v.unit.hp / v.unit.maxHp), 4);
+      if (v.hero) { g.fillStyle(0xffd067, 1); g.fillTriangle(v.c.x - 5, y - 9, v.c.x + 5, y - 9, v.c.x, y - 2); }
     }
     // 효과
     for (let i = this.fx.length - 1; i >= 0; i--) {

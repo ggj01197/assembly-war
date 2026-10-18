@@ -9,6 +9,8 @@ export interface Stage {
   id: string; no: number; name: string; hint: string;
   enemy: Build[]; enemyLevel: number; enemyWattMult: number;
   rewardOre: number; rewardExp: number;
+  /** 적이 쓰는 스킬 id·영웅 id (없으면 없음) — 2·3장에서 사용 */
+  enemySkills?: string[]; enemyHero?: string;
 }
 
 const biped: Build = { legs: 'legs_biped_light', body: 'body_arm_scout', weapon: 'wpn_arm_gatling' };

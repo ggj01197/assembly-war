@@ -1,4 +1,5 @@
 import type { Build } from './assemble';
+import { defaultLoadout, repairLoadout, type Loadout } from './loadout';
 
 /**
  * 세이브 (TD-006): 버전 필드 + 읽을 때마다 고치기(repair). 읽지 못한 세이브는 새 게임이 덮어쓰기 전에 호출 쪽이 격리한다.
@@ -20,6 +21,8 @@ export interface SaveData {
   stages: Record<string, { clears: number; bestBaseHp: number }>;
   flags: { assembled: boolean; firstWin: boolean };
   settings: { sound: boolean; reducedMotion: boolean };
+  /** 출격 장비: 스킬 2칸 + 영웅 1명 (5-C) */
+  loadout: Loadout;
 }
 
 export const STARTER_DECK: Build[] = [
@@ -40,6 +43,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     partLevels, stages: {},
     flags: { assembled: false, firstWin: false },
     settings: { sound: true, reducedMotion: false },
+    loadout: defaultLoadout(),
   };
 }
 
@@ -85,6 +89,7 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
   if (r.settings && typeof r.settings === 'object') {
     out.settings = { sound: (r.settings as { sound?: unknown }).sound !== false, reducedMotion: !!(r.settings as { reducedMotion?: unknown }).reducedMotion };
   }
+  out.loadout = repairLoadout((r as { loadout?: unknown }).loadout, commanderLevel(out.commanderExp).level);
   out.version = SAVE_VERSION;
   return out;
 }
