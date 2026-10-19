@@ -30,7 +30,7 @@ export function mountResult(root: HTMLElement, nav: Nav): Screen {
       <section class="rs-head ${d.win ? 'win' : 'lose'}">
         <small>${sv ? '' : '작전 '}${esc(stageLabel(d.stage))}${sv ? '' : ' · ' + esc(d.stage.name)}</small>
         <h1>${d.quit ? '작전 포기' : sv ? (d.win ? '5분 돌파!' : '기록 ' + secs + '초') : d.win ? '작전 성공' : '작전 실패'}</h1>
-        <p>${Math.floor(secs / 60)}분 ${String(secs % 60).padStart(2, '0')}초 버팀${sv ? '' : ` · 내 기지 ${Math.max(0, Math.ceil(r.baseHp[0]))}/${BASE_HP} · 적 기지 ${Math.max(0, Math.ceil(r.baseHp[1]))}/${BASE_HP}`}${sv ? ` · 내 기지 ${Math.max(0, Math.ceil(r.baseHp[0]))}/${BASE_HP} · 처치 ${r.kills[0]}` : ''}</p>
+        <p>${Math.floor(secs / 60)}분 ${String(secs % 60).padStart(2, '0')}초 버팀${sv ? '' : ` · 왕관 ${r.crowns[0]}:${r.crowns[1]} · 내 기지 ${Math.max(0, Math.ceil(r.baseHp[0]))}/${BASE_HP} · 적 기지 ${Math.max(0, Math.ceil(r.baseHp[1]))}/${BASE_HP}`}${sv ? ` · 내 기지 ${Math.max(0, Math.ceil(r.baseHp[0]))}/${BASE_HP} · 처치 ${r.kills[0]}` : ''}</p>
       </section>
       <section class="rs-rewards">
         <span>광석 <b>+${d.rewards.ore}</b></span><span>경험치 <b>+${d.rewards.exp}</b></span>${d.rewards.tickets ? `<span>보급권 <b>+${d.rewards.tickets}</b></span>` : ''}

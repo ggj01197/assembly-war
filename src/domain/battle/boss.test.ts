@@ -24,7 +24,7 @@ describe('보스', () => {
     run(b, 46);
     const boss = b.bossUnit()!; boss.cd = 99999;
     const air = { legs: 'legs_hover', body: 'body_arm_scout', weapon: 'wpn_arm_gatling' };
-    const b2 = new Battle(deck(biped, air), deck(biped), PARTS, 3, { bots: [false, false], boss: 'boss_fortress' });
+    const b2 = new Battle(deck(biped, air), deck(biped), PARTS, 3, { bots: [false, false], towers: false, boss: 'boss_fortress' });
     run(b2, 46); b2.watt[0] = 10; b2.spawn(0, 0, 1); b2.watt[0] = 10; b2.spawn(0, 1, 1);
     const g = b2.units.find(u => u.team === 0 && u.stats.move === 'ground')!, a = b2.units.find(u => u.team === 0 && u.stats.move === 'air')!;
     const bu = b2.bossUnit()!; bu.cd = 99999; g.cd = 99999; a.cd = 99999; g.pos = 20; g.prev = 20; a.pos = 20; a.prev = 20;

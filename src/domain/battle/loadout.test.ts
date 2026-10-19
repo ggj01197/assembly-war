@@ -54,7 +54,7 @@ describe('스킬 8종', () => {
 
   it('보호막은 내 기지가 받는 피해를 절반으로 줄인다', () => {
     const mkShield = (shield: boolean) => {
-      const b = new Battle(deck(tank), deck(biped), PARTS, 3, { bots: [false, false], skills: [shield ? ['sk_shield'] : [], []] });
+      const b = new Battle(deck(tank), deck(biped), PARTS, 3, { bots: [false, false], towers: false, skills: [shield ? ['sk_shield'] : [], []] });
       return b;
     };
     const hit = (shield: boolean) => {

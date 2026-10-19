@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { LANES, TICK_HZ, BASE_HP, POINT_LANE, POINT_POS, POINT_RADIUS, POINT_CAPTURE_SEC, type Battle, type BattleEvent, type Unit } from '../../domain/battle/sim';
+import { LANES, TICK_HZ, BASE_HP, TOWER_NEAR, TOWER_FAR, POINT_LANE, POINT_POS, POINT_RADIUS, POINT_CAPTURE_SEC, type Battle, type BattleEvent, type Unit } from '../../domain/battle/sim';
 import { layoutUnit, spriteUrl, spriteUrlBack } from '../unitLayout';
 import { PARTS } from '../../data/parts';
 import { play } from '../../native/audio';
-import type { BattleHud } from '../../ui/battleHud';
+import type { BattleHud, DragPhase } from '../../ui/battleHud';
 import { skillById, heroById, HERO_WATT, HERO_MOVE_SEC } from '../../domain/loadout';
 import { bossById } from '../../data/bosses';
 import type { Stage } from '../../data/stages';
@@ -21,10 +21,11 @@ interface View {
   shadow: Phaser.GameObjects.Ellipse; imgs: Phaser.GameObjects.Image[];
   unit: Unit; w: number; h: number; lift: number; kind: Move; face: 1 | -1;
   ph: number; mv: number; born: number; landed: boolean; recoil: number; lunge: number; flash: number; hpShow: number; shake: number;
-  lastX: number; lastY: number; foot: number; dying: number; tinted: boolean; lastHp: number; recoilK?: number; k: number; hero: boolean;
+  lastX: number; lastY: number; foot: number; dying: number; tinted: boolean; lastHp: number; recoilK?: number; k: number; hero: boolean; atkT: number; atkW: number;
 }
-type FxKind = 'tracer' | 'blast' | 'puff' | 'ring' | 'flash' | 'spark' | 'dust' | 'debris';
-interface Fx { kind: FxKind; x1: number; y1: number; x2: number; y2: number; t: number; dur: number; color: number; r: number }
+type FxKind = 'tracer' | 'blast' | 'puff' | 'ring' | 'flash' | 'spark' | 'dust' | 'debris' | 'proj' | 'beam' | 'img';
+/** key: 스프라이트(투사체·효과), arc: 포물선 높이(px), rot: 회전, img: 만들어진 그림(끝나면 지운다) */
+interface Fx { kind: FxKind; x1: number; y1: number; x2: number; y2: number; t: number; dur: number; color: number; r: number; key?: string; arc?: number; rot?: number; add?: boolean; w1?: number; img?: Phaser.GameObjects.Image; img2?: Phaser.GameObjects.Image }
 
 /** 무기 계열별 연출: 선 색·굵기·길이, 착탄 폭발, 소리 (sim 은 계열 이름을 몰라도 되고 연출만 안다) */
 const FAMILY_FX: Record<string, { color: number; width: number; dur: number; blast?: { r: number; color: number; t: number; dur: number }; sound: string; gap: number; kick: number }> = {
@@ -37,6 +38,17 @@ const FAMILY_FX: Record<string, { color: number; width: number; dur: number; bla
   repair: { color: 0x6fe39a, width: 3, dur: 0.2, sound: 'repair', gap: 160, kick: 0 },
   mortar: { color: 0xffc46b, width: 5, dur: 0.34, blast: { r: 38, color: 0xff9f43, t: 0.28, dur: 0.38 }, sound: 'mortar', gap: 200, kick: 1.6 },
 };
+/** 무기 계열별 투사체: 스프라이트·비행 시간·포물선(거리 대비)·굵기(px, 화면 폭 390 기준)·연발 수 */
+const PROJ: Record<string, { key: string; dur: number; arc: number; w: number; count: number }> = {
+  gatling: { key: 'pj_bullet', dur: 0.11, arc: 0, w: 34, count: 2 },
+  cannon: { key: 'pj_shell', dur: 0.26, arc: 0.12, w: 38, count: 1 },
+  missile: { key: 'pj_missile', dur: 0.36, arc: 0.1, w: 46, count: 1 },
+  flak: { key: 'pj_flak', dur: 0.2, arc: 0.04, w: 34, count: 1 },
+  mortar: { key: 'pj_shell', dur: 0.55, arc: 0.55, w: 34, count: 1 },
+  repair: { key: 'pj_plasma', dur: 0.26, arc: 0.08, w: 30, count: 1 },
+};
+const FX_KEYS = ['fx_explosion', 'fx_smoke', 'fx_spark', 'fx_energy', 'fx_slash', 'fx_muzzle', 'fx_heal', 'fx_ring', 'fx_shield', 'pj_bullet', 'pj_missile', 'pj_shell', 'pj_laser', 'pj_flak', 'pj_plasma'];
+const TOWER_KEYS = ['tower_f_ok', 'tower_f_hurt', 'tower_f_dead', 'tower_b_ok', 'tower_b_hurt', 'tower_b_dead'];
 const TRAY_H = 176;     // CSS 와 같아야 한다 (battle .bt-tray)
 const TOP_H = 84;       // 위 막대·타이머
 
@@ -80,12 +92,17 @@ export class BattleScene extends Phaser.Scene {
   private hoverLane = -1;
   private bossText: Phaser.GameObjects.Text | null = null;
   private motes: { x: number; y: number; v: number; s: number }[] = [];
+  private towerImgs: Phaser.GameObjects.Image[][] = [[], []];
+  private towerKick: number[][] = [[0, 0, 0], [0, 0, 0]]; private towerFlash: number[][] = [[0, 0, 0], [0, 0, 0]]; private towerSmoke = 0;
+  private numbers = new Map<string, { acc: number; t: number; x: number; y: number; color: number; heal: boolean }>();
+  private drag: { card: number; ghost: Phaser.GameObjects.Container } | null = null;
 
   constructor() { super('battle'); }
 
   init(cfg: BattleConfig) {
     this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
     this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hoverLane = -1; this.bossText = null;
+    this.towerImgs = [[], []]; this.towerKick = [[0, 0, 0], [0, 0, 0]]; this.towerFlash = [[0, 0, 0], [0, 0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
   }
 
   preload() {
@@ -95,12 +112,15 @@ export class BattleScene extends Phaser.Scene {
       if (!this.textures.exists(p.id)) this.load.image(p.id, spriteUrl(p.id));
       if (!this.textures.exists('b_' + p.id)) this.load.image('b_' + p.id, spriteUrlBack(p.id));
     }
+    for (const k of FX_KEYS) if (!this.textures.exists(k)) this.load.image(k, `sprites/fx/${k}.png`);
+    for (const k of TOWER_KEYS) if (!this.textures.exists(k)) this.load.image(k, `sprites/tower/${k}.png`);
     this.load.on('loaderror', () => { /* 뒷모습이 없으면 앞모습으로 대신한다 (layoutUnit) */ });
   }
 
   create() {
     this.cfg.hud.setup(this.cfg.stage, this.cfg.battle, {
       onSelect: i => { this.selected = this.selected === i ? null : i; this.selSkill = null; this.selHero = false; },
+      onDrag: (ph, card, x, y) => this.onDrag(ph, card, x, y),
       onSkill: slot => this.pickSkill(slot), onHero: () => this.pickHero(), onHeroSkill: () => this.heroSkill(),
       onQuit: () => { if (!this.ended) { this.ended = true; this.cfg.onQuit(); } },
     });
@@ -111,6 +131,7 @@ export class BattleScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.dead = true; this.scale.off('resize', this.onResize, this); });
     this.drawStatic();
+    this.buildTowers();
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onTap(p.worldX, p.worldY));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => { this.hoverLane = p.y > (this.y0 + this.y1) / 2 ? this.laneAt(p.worldX, p.worldY) : -1; });
     for (let i = 0; i < 14; i++) this.motes.push({ x: Math.random(), y: Math.random(), v: 0.012 + Math.random() * 0.02, s: 0.6 + Math.random() * 1.4 });
@@ -130,7 +151,7 @@ export class BattleScene extends Phaser.Scene {
     this.y1 = this.H - (m.tray || TRAY_H) - 26;      // 내 쪽 끝(pos 0)
     this.k = clamp(0.6 * (this.W / 390), 0.42, 0.85);
   }
-  private onResize() { this.layout(); this.drawStatic(); }
+  private onResize() { this.layout(); this.drawStatic(); this.buildTowers(); }
   private get sy() { return (this.y1 - this.y0) / ((V_NEAR - V_FAR) * IMG_H); }
   private get oy() { return this.y0 - V_FAR * IMG_H * this.sy; }
   /** 0(내 기지) ~ 1(적 기지) 의 깊이 */
@@ -163,6 +184,86 @@ export class BattleScene extends Phaser.Scene {
     gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.62)');
     cx.fillStyle = gr; cx.fillRect(0, 0, 256, 512); ct.refresh();
     this.add.image(this.W / 2, this.H / 2, 'vignette').setDisplaySize(this.W, this.H).setName('bg').setDepth(99999);
+  }
+
+  // ───────── 포탑 (길마다 양쪽 1기) ─────────
+  private towerPos = (team: 0 | 1) => (team === 0 ? TOWER_NEAR : TOWER_FAR);
+  private towerXY(team: 0 | 1, lane: number) { const pos = this.towerPos(team), t = this.tOf(pos); return { x: this.laneXAt(lane, t), y: this.posToY(pos), s: this.scaleAt(t) }; }
+  private buildTowers() {
+    for (const row of this.towerImgs) for (const im of row) im.destroy();
+    this.towerImgs = [[], []];
+    for (const team of [0, 1] as const) for (let l = 0; l < LANES; l++) {
+      const im = this.add.image(0, 0, team === 0 ? 'tower_b_ok' : 'tower_f_ok').setOrigin(0.5, 0.88);
+      this.towerImgs[team].push(im);
+    }
+  }
+  private syncTowers(b: Battle, dt: number) {
+    if (!b.towersOn) { for (const row of this.towerImgs) for (const im of row) im.setVisible(false); return; }
+    const gg = this.groundG;
+    for (const team of [0, 1] as const) for (let l = 0; l < LANES; l++) {
+      const im = this.towerImgs[team][l]; if (!im) continue;
+      const tw = b.towers[team][l], f = tw.hp / tw.maxHp, pre = team === 0 ? 'tower_b_' : 'tower_f_';
+      const key = pre + (tw.hp <= 0 ? 'dead' : f < 0.45 ? 'hurt' : 'ok');
+      if (im.texture.key !== key) im.setTexture(key);
+      const { x, y, s } = this.towerXY(team, l), okW = this.textures.get(pre + 'ok').getSourceImage().width;
+      const dw = this.W * 0.17 * s, k = dw / okW, src = im.texture.getSourceImage();
+      this.towerKick[team][l] = Math.max(0, this.towerKick[team][l] - dt * 7); this.towerFlash[team][l] = Math.max(0, this.towerFlash[team][l] - dt * 8);
+      const kick = this.cfg.reducedMotion ? 0 : this.towerKick[team][l];
+      im.setPosition(x, y + kick * 4 * s * (team === 0 ? 1 : -1)).setDisplaySize(src.width * k * (1 + kick * 0.04), src.height * k * (1 - kick * 0.03)).setDepth(y).setVisible(true);
+      if (this.towerFlash[team][l] > 0.3 && tw.hp > 0) im.setTintFill(0xffffff); else im.clearTint();
+      if (tw.hp > 0 && f < 1) {
+        const w = dw * 0.95, bx = x - w / 2, by = y - src.height * k * 0.88 - 8 * s;
+        gg.fillStyle(0x000000, 0.65); gg.fillRect(bx - 1, by - 1, w + 2, 6);
+        gg.fillStyle(team === 0 ? 0x5fd3ff : 0xff7a45, 1); gg.fillRect(bx, by, w * f, 4);
+      }
+      if (tw.hp <= 0 && !this.cfg.reducedMotion) {
+        this.towerSmoke -= dt;
+        if (this.towerSmoke <= 0 && this.fx.length < 100) { this.towerSmoke = 0.35; this.fx.push({ kind: 'img', key: 'fx_smoke', x1: 0, y1: 0, x2: x + (Math.random() - 0.5) * 16 * s, y2: y - 24 * s, t: 0, dur: 1.2, color: 0xffffff, r: 18 * s, w1: 42 * s }); }
+      }
+    }
+  }
+
+  // ───────── 피해 숫자 (같은 대상은 0.35초 단위로 모아서) ─────────
+  private addNumber(key: string, x: number, y: number, v: number, color: number, heal = false) {
+    const e = this.numbers.get(key);
+    if (e) { e.acc += v; e.x = x; e.y = y; } else this.numbers.set(key, { acc: v, t: 0.05, x, y, color, heal });
+  }
+  private tickNumbers(dt: number) {
+    for (const [k, e] of this.numbers) {
+      e.t -= dt; if (e.t > 0) continue;
+      if (e.acc >= 1) {
+        const txt = this.add.text(e.x + (Math.random() - 0.5) * 10, e.y, (e.heal ? '+' : '') + Math.round(e.acc), { fontFamily: 'Black Han Sans, Noto Sans KR, sans-serif', fontSize: e.acc >= 40 ? '19px' : '14px', color: '#' + e.color.toString(16).padStart(6, '0'), stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(100002);
+        this.tweens.add({ targets: txt, y: e.y - 30, alpha: 0, duration: 650, ease: 'Cubic.out', onComplete: () => txt.destroy() });
+      }
+      this.numbers.delete(k);
+    }
+  }
+
+  // ───────── 카드 끌어다 놓기 (클래시 로얄식) ─────────
+  private toWorld(cx: number, cy: number) { const r = this.game.canvas.getBoundingClientRect(); return { x: (cx - r.left) * (this.W / r.width), y: (cy - r.top) * (this.H / r.height) }; }
+  private onDrag(ph: DragPhase, card: number, cx: number, cy: number) {
+    if (this.ended) return;
+    const b = this.cfg.battle, hud = this.cfg.hud, { x, y } = this.toWorld(cx, cy);
+    if (ph === 'start') {
+      this.clearSel(); this.selected = card;
+      const build = b.decks[0][card].build, L = layoutUnit(build, this.k, true);
+      const c = this.add.container(x, y).setDepth(100500).setAlpha(0.7);
+      if (L) for (const part of L.parts) c.add(this.add.image(part.x, part.y, this.textures.exists(part.tex) ? part.tex : part.id).setOrigin(0, 0).setDisplaySize(part.w, part.h));
+      this.drag = { card, ghost: c };
+      this.hoverLane = this.laneAt(x, y);
+    } else if (this.drag) {
+      this.drag.ghost.setPosition(x, y + 18);
+      this.hoverLane = y > (this.y0 + this.y1) / 2 ? this.laneAt(x, y) : -1;
+      if (ph === 'end' || ph === 'cancel') {
+        this.drag.ghost.destroy(); this.drag = null;
+        if (ph === 'end') {
+          if (y < (this.y0 + this.y1) / 2) { hud.toast('아군 진영(아래쪽)에 놓아 주세요.'); play('deny'); }
+          else if (!b.spawn(0, card, this.laneAt(x, y))) { play('deny'); hud.toast(b.decks[0][card].watt > b.watt[0] ? '와트가 부족해요. 조금 기다리세요.' : '유닛이 너무 많아요.'); }
+          else this.selected = null;
+        }
+        this.hoverLane = -1;
+      }
+    }
   }
 
   // ───────── 입력 ─────────
@@ -242,6 +343,8 @@ export class BattleScene extends Phaser.Scene {
     const alpha = this.ended ? 1 : clamp(this.acc / stepMs, 0, 1);
     this.sync(b, delta, alpha);
     this.draw(b, delta);
+    this.syncTowers(b, delta / 1000);
+    this.tickNumbers(delta / 1000);
     this.cfg.hud.update(b, { card: this.selected, skill: this.selSkill, hero: this.selHero });
     // 와트가 가득 차면(낭비되기 직전) 한 번 알려 준다
     if (b.watt[0] >= 9.99 && !this.wattFull) { this.wattFull = true; play('ready'); } else if (b.watt[0] < 9) this.wattFull = false;
@@ -271,10 +374,16 @@ export class BattleScene extends Phaser.Scene {
         const a = this.posOf(e.from, b); if (!a) continue;
         const av = this.views.get(e.from);
         let tx: number, ty: number, ts = 1;
+        const heal = e.family === 'repair';
         if (e.to !== null) {
           const t = this.posOf(e.to, b); if (!t) continue; tx = t.x; ty = t.y - t.h * 0.4 * t.s; ts = t.s;
           const tv = this.views.get(e.to);
-          if (tv && e.family !== 'repair') { tv.flash = 1; tv.hpShow = 1.4; tv.shake = 1; }
+          if (tv && !heal) { tv.flash = 1; tv.hpShow = 1.4; tv.shake = 1; }
+          if (e.dmg) this.addNumber('u' + e.to, tx, t.y - t.h * t.s - 10, e.dmg, heal ? 0x6fe39a : (tv && tv.unit.team === 0 ? 0xff8a6b : 0xfff3b0), heal);
+        } else if (e.towerOf !== undefined) {
+          const tp = this.towerXY(e.towerOf, e.lane); tx = tp.x; ty = tp.y - 30 * tp.s; ts = tp.s;
+          this.towerFlash[e.towerOf][e.lane] = 1;
+          if (e.dmg) this.addNumber(`t${e.towerOf}${e.lane}`, tx, tp.y - 70 * tp.s, e.dmg, 0xffd9a0);
         } else {
           tx = this.laneXAt(e.lane, e.baseOf === 1 ? 1 : 0); ty = this.baseY(e.baseOf as 0 | 1); this.baseFlash[e.baseOf as 0 | 1] = 1;
           play('hit', 80); if (e.baseOf === 0 && !calm) this.cameras.main.shake(70, 0.003);
@@ -282,22 +391,54 @@ export class BattleScene extends Phaser.Scene {
         const fx = FAMILY_FX[e.family] ?? FAMILY_FX.gatling;
         if (av) {
           if (e.family === 'blade') av.lunge = 1; else av.recoil = Math.max(av.recoil, fx.kick > 0 ? 1 : 0.2);
-          av.recoilK = fx.kick;
+          av.recoilK = fx.kick; av.atkT = 0; av.atkW = e.family === 'blade' ? 1.4 : 0.6 + fx.kick * 0.4;
         }
         // 총구: 내 유닛(뒷모습)은 위쪽을 향해 쏜다
         const mine = av ? av.face === 1 : true;
-        const mx = a.x + (mine ? a.s * 8 : -a.s * 8), my = a.y - a.h * a.s * (mine ? 0.62 : 0.4);
-        this.fx.push({ kind: 'tracer', x1: mx, y1: my, x2: tx, y2: ty, t: 0, dur: fx.dur, color: fx.color, r: fx.width * Math.max(0.8, a.s) });
-        if (fx.kick > 0) this.fx.push({ kind: 'flash', x1: mx, y1: my, x2: mx, y2: my, t: 0, dur: 0.1, color: fx.color, r: (5 + fx.kick * 4) * a.s });
-        if (fx.blast) this.fx.push({ kind: 'blast', x1: tx, y1: ty, x2: tx, y2: ty, t: fx.blast.t, dur: fx.blast.dur, color: fx.blast.color, r: fx.blast.r * ts });
-        if (e.family !== 'repair') this.fx.push({ kind: 'spark', x1: tx, y1: ty, x2: tx, y2: ty, t: fx.blast ? fx.blast.t : 0.05, dur: 0.2, color: 0xfff3b0, r: 12 * ts });
-        if (e.family === 'repair') this.fx.push({ kind: 'ring', x1: tx, y1: ty, x2: tx, y2: ty, t: 0.05, dur: 0.3, color: 0x6fe39a, r: 22 * ts });
+        const mx = a.x + (mine ? a.s * 10 : -a.s * 10), my = a.y - a.h * a.s * (mine ? 0.66 : 0.42);
+        const ang = Math.atan2(ty - my, tx - mx), wk = this.W / 390;
+        const delay = (n: number) => -n * 0.05;
+        if (fx.kick > 0 && e.family !== 'blade') this.fx.push({ kind: 'flash', x1: mx, y1: my, x2: mx, y2: my, t: 0, dur: 0.12, color: fx.color, r: (7 + fx.kick * 6) * a.s * wk, rot: ang + Math.PI / 2 });
+        if (e.family === 'laser') {
+          this.fx.push({ kind: 'beam', key: 'pj_laser', x1: mx, y1: my, x2: tx, y2: ty, t: 0, dur: 0.17, color: fx.color, r: 16 * a.s * wk });
+          this.fx.push({ kind: 'img', key: 'fx_energy', x1: 0, y1: 0, x2: tx, y2: ty, t: 0.03, dur: 0.3, color: fx.color, r: 20 * ts * wk, w1: 46 * ts * wk, add: true });
+        } else if (e.family === 'blade') {
+          this.fx.push({ kind: 'img', key: 'fx_slash', x1: 0, y1: 0, x2: tx, y2: ty, t: 0.04, dur: 0.22, color: fx.color, r: 40 * ts * wk, w1: 58 * ts * wk, rot: ang + 0.6, add: true });
+          this.fx.push({ kind: 'spark', x1: tx, y1: ty, x2: tx, y2: ty, t: 0.06, dur: 0.22, color: 0xffffff, r: 14 * ts * wk });
+        } else {
+          const pj = PROJ[e.family] ?? PROJ.gatling, dist = Math.hypot(tx - mx, ty - my);
+          for (let n = 0; n < pj.count; n++) {
+            this.fx.push({ kind: 'proj', key: pj.key, x1: mx, y1: my, x2: tx, y2: ty, t: delay(n), dur: pj.dur, color: fx.color, r: pj.w * a.s * wk, arc: pj.arc * dist, rot: ang });
+          }
+          const hit = pj.dur + delay(pj.count - 1) * -1 * 0;   // 마지막 탄이 닿을 때
+          if (fx.blast) this.fx.push({ kind: 'blast', x1: tx, y1: ty, x2: tx, y2: ty, t: pj.dur * 0.92, dur: fx.blast.dur, color: fx.blast.color, r: fx.blast.r * ts * wk });
+          else if (!heal) this.fx.push({ kind: 'spark', x1: tx, y1: ty, x2: tx, y2: ty, t: hit * 0.95, dur: 0.2, color: 0xfff3b0, r: 11 * ts * wk });
+          if (heal) this.fx.push({ kind: 'img', key: 'fx_heal', x1: 0, y1: 0, x2: tx, y2: ty + 6 * ts, t: pj.dur * 0.9, dur: 0.6, color: 0x6fe39a, r: 26 * ts * wk, w1: 34 * ts * wk, add: true });
+        }
         play(fx.sound, fx.gap);
+      } else if (e.type === 'tower') {
+        const tp = this.towerXY(e.team, e.lane), tgt = this.posOf(e.to, b); if (!tgt) continue;
+        const tv = this.views.get(e.to); if (tv) { tv.flash = 1; tv.hpShow = 1.4; tv.shake = 1; }
+        this.towerKick[e.team][e.lane] = 1;
+        const mx = tp.x, my = tp.y - 46 * tp.s, tx = tgt.x, ty = tgt.y - tgt.h * 0.4 * tgt.s, wk = this.W / 390;
+        this.fx.push({ kind: 'flash', x1: mx, y1: my, x2: mx, y2: my, t: 0, dur: 0.12, color: 0xffe07a, r: 10 * tp.s * wk, rot: Math.atan2(ty - my, tx - mx) + Math.PI / 2 });
+        this.fx.push({ kind: 'proj', key: 'pj_shell', x1: mx, y1: my, x2: tx, y2: ty, t: 0, dur: 0.2, color: 0xffe07a, r: 34 * tp.s * wk, arc: 0.06 * Math.hypot(tx - mx, ty - my), rot: Math.atan2(ty - my, tx - mx) });
+        this.fx.push({ kind: 'spark', x1: tx, y1: ty, x2: tx, y2: ty, t: 0.18, dur: 0.2, color: 0xfff3b0, r: 10 * tgt.s * wk });
+        this.addNumber('u' + e.to, tx, tgt.y - tgt.h * tgt.s - 10, e.dmg, tgt.x ? (tv && tv.unit.team === 0 ? 0xff8a6b : 0xfff3b0) : 0xffffff);
+        play('gatling', 160);
+      } else if (e.type === 'towerDown') {
+        const tp = this.towerXY(e.team, e.lane), wk = this.W / 390;
+        for (let i = 0; i < 5; i++) this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: tp.x + (i - 2) * 16 * tp.s, y2: tp.y - 26 * tp.s - (i % 2) * 20 * tp.s, t: i * 0.08, dur: 0.55, color: 0xffa94d, r: 46 * tp.s * wk });
+        this.fx.push({ kind: 'ring', x1: tp.x, y1: tp.y, x2: tp.x, y2: tp.y, t: 0, dur: 0.6, color: 0xffd7a0, r: 70 * tp.s * wk });
+        play('baseHit'); play('boom', 0);
+        if (!calm) this.cameras.main.shake(380, 0.012);
+        this.cfg.hud.toast(e.team === 1 ? '적 포탑 파괴! 왕관 +1 👑' : '내 포탑이 무너졌어요!');
       } else if (e.type === 'die') {
         const t = this.tOf(e.pos), x = this.laneXAt(e.lane, t), y = this.posToY(e.pos) - 18 * this.scaleAt(t), s = this.scaleAt(t);
         const col = e.team === 0 ? 0x5fd3ff : 0xff7a45;
         this.fx.push({ kind: 'puff', x1: x, y1: y, x2: x, y2: y, t: 0, dur: 0.5, color: col, r: 34 * s });
         this.fx.push({ kind: 'debris', x1: x, y1: y, x2: x, y2: y, t: 0, dur: 0.7, color: 0xb9c3d1, r: 46 * s });
+        this.fx.push({ kind: 'img', key: 'fx_smoke', x1: 0, y1: 0, x2: x, y2: y - 10 * s, t: 0.1, dur: 0.9, color: 0xffffff, r: 22 * s * (this.W / 390), w1: 52 * s * (this.W / 390) });
         this.fx.push({ kind: 'ring', x1: x, y1: y + 10 * s, x2: x, y2: y + 10 * s, t: 0, dur: 0.4, color: 0xffd7a0, r: 40 * s });
         play('boom', 110);
         const big = this.views.get(e.unit);
@@ -441,7 +582,13 @@ export class BattleScene extends Phaser.Scene {
     const kick = (v.recoilK ?? 0.5) * (calm ? 0 : 1);
     const recoilPx = v.recoil * v.recoil * h * 0.05 * kick * v.face;             // 내 유닛(face=1)은 아래로 밀린다
     const lungePx = Math.sin(v.lunge * Math.PI) * h * 0.14 * -v.face * (calm ? 0 : 1); // 앞으로 찌르기
-    v.rig.setPosition(upX + (v.shake > 0 ? Math.sin(now * 90) * v.shake * 2.2 : 0), -v.lift + rigY + recoilPx + lungePx + drop);
+    // 공격 모션: 쏘기 직전 살짝 몸을 젖히고(예비 동작) 반동·돌진으로 이어진다 — 연사 무기는 총구가 떠는 진동
+    v.atkT += dt;
+    const wind = !calm && v.atkT < 0.2 ? (v.atkT < 0.07 ? v.atkT / 0.07 : 1 - (v.atkT - 0.07) / 0.13) * h * 0.022 * v.atkW * v.face : 0;
+    const jit = !calm && v.atkT < 0.18 && (v.recoilK ?? 0) <= 0.6 ? Math.sin(v.atkT * 120) * 0.8 : 0;
+    upRot += -v.face * (calm ? 0 : Math.max(0, 0.2 - v.atkT) * 0.25 * v.atkW);
+    upX += jit;
+    v.rig.setPosition(upX + (v.shake > 0 ? Math.sin(now * 90) * v.shake * 2.2 : 0), -v.lift + rigY + recoilPx + lungePx + wind + drop);
     v.rig.rotation = rigRot;
     v.rig.setScale(1 + land * 0.5, sqY - land);
     v.legsC.rotation = legRot; v.upper.setPosition(upX * 0.5, upY - recoilPx * 0.4); v.upper.rotation = upRot;
@@ -479,7 +626,7 @@ export class BattleScene extends Phaser.Scene {
     return {
       c, rig, legsC, upper, shadow, imgs, unit: u, w: L.w, h: L.h, lift, kind: moveKind(build.legs, air), face,
       ph: Math.random() * 6, mv: 0, born: this.time.now / 1000, landed: false, recoil: 0, lunge: 0, flash: 0, hpShow: 0, shake: 0,
-      lastX: 0, lastY: 0, foot: 0, dying: -1, tinted: false, lastHp: u.hp, k: hd ? hd.scale : 1, hero: !!hd,
+      lastX: 0, lastY: 0, foot: 0, dying: -1, tinted: false, lastHp: u.hp, k: hd ? hd.scale : 1, hero: !!hd, atkT: 9, atkW: 0,
     } as View;
   }
 
@@ -588,24 +735,41 @@ export class BattleScene extends Phaser.Scene {
     for (let i = this.fx.length - 1; i >= 0; i--) {
       const f = this.fx[i]; f.t += dt;
       const p = f.t / f.dur;
-      if (p >= 1) { this.fx.splice(i, 1); continue; }
+      if (p >= 1) { f.img?.destroy(); f.img2?.destroy(); this.fx.splice(i, 1); continue; }
       if (p < 0) continue;
+      const imgFx = (key: string, w0: number, w1: number, a0: number, a1: number, add: boolean, rot = 0) => {
+        if (!f.img) { f.img = this.add.image(f.x2, f.y2, key).setDepth(100001); if (add) f.img.setBlendMode(Phaser.BlendModes.ADD); }
+        const tex = f.img.texture.getSourceImage(), w = lerp(w0, w1, p);
+        f.img.setPosition(f.x2, f.y2).setDisplaySize(w, w * tex.height / tex.width).setAlpha(lerp(a0, a1, p)).setRotation(rot);
+      };
       if (f.kind === 'tracer') {
         const hx = f.x1 + (f.x2 - f.x1) * Math.min(1, p * 1.5), hy = f.y1 + (f.y2 - f.y1) * Math.min(1, p * 1.5);
         g.lineStyle(f.r * 2.2, f.color, 0.22 * (1 - p)); g.lineBetween(f.x1 + (hx - f.x1) * 0.35, f.y1 + (hy - f.y1) * 0.35, hx, hy);
         g.lineStyle(f.r, f.color, 1 - p * 0.6); g.lineBetween(f.x1 + (hx - f.x1) * 0.35, f.y1 + (hy - f.y1) * 0.35, hx, hy);
+      } else if (f.kind === 'proj') {
+        // 탄: 총구 → 목표, 포물선 + 진행 방향으로 회전
+        if (!f.img) f.img = this.add.image(f.x1, f.y1, f.key!).setDepth(100001);
+        const x = lerp(f.x1, f.x2, p), y = lerp(f.y1, f.y2, p) - (f.arc ?? 0) * 4 * p * (1 - p);
+        const dx = (f.x2 - f.x1), dy = (f.y2 - f.y1) - (f.arc ?? 0) * 4 * (1 - 2 * p);
+        const tex = f.img.texture.getSourceImage();
+        f.img.setPosition(x, y).setRotation(Math.atan2(dy, dx)).setDisplaySize(f.r, f.r * tex.height / tex.width).setAlpha(1);
+      } else if (f.kind === 'beam') {
+        if (!f.img) f.img = this.add.image(f.x1, f.y1, f.key!).setOrigin(0, 0.5).setDepth(100001).setBlendMode(Phaser.BlendModes.ADD);
+        const len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1), tex = f.img.texture.getSourceImage();
+        f.img.setPosition(f.x1, f.y1).setRotation(Math.atan2(f.y2 - f.y1, f.x2 - f.x1)).setDisplaySize(len, f.r * (1 - p * 0.5) * (tex.height / tex.width) * 6).setAlpha(1 - p * p);
+      } else if (f.kind === 'img') {
+        imgFx(f.key!, f.r * 2, f.w1 ?? f.r * 3, 0.95, 0, !!f.add && f.key !== 'fx_smoke', f.rot ?? 0);
+        if (f.key === 'fx_smoke') f.img!.setY(f.y2 - p * 14);
       } else if (f.kind === 'blast') {
-        g.fillStyle(f.color, 0.6 * (1 - p)); g.fillCircle(f.x2, f.y2, f.r * (0.4 + p));
-        g.fillStyle(0xffffff, 0.5 * (1 - p) * (1 - p)); g.fillCircle(f.x2, f.y2, f.r * 0.35 * (1 - p));
-      } else if (f.kind === 'puff') {
-        for (let k = 0; k < 6; k++) { const a = k * 1.05 + 0.4, d = f.r * p; g.fillStyle(f.color, 0.7 * (1 - p)); g.fillCircle(f.x2 + Math.cos(a) * d, f.y2 + Math.sin(a) * d * 0.8, 6 * (1 - p) + 2); }
-        g.fillStyle(0xfff2cc, 0.85 * (1 - p)); g.fillCircle(f.x2, f.y2, f.r * 0.5 * (1 - p));
-      } else if (f.kind === 'flash') {
-        g.fillStyle(f.color, 0.8 * (1 - p)); g.fillCircle(f.x2, f.y2, f.r * (1 - p * 0.4));
-        g.fillStyle(0xffffff, 0.9 * (1 - p)); g.fillCircle(f.x2, f.y2, f.r * 0.45);
+        imgFx('fx_explosion', f.r * 1.5, f.r * 2.9, 0.95, 0, false);
       } else if (f.kind === 'spark') {
-        g.lineStyle(2, f.color, 1 - p);
-        for (let k = 0; k < 6; k++) { const a = k * 1.047 + 0.3, d0 = f.r * p * 0.5, d1 = f.r * (0.4 + p); g.lineBetween(f.x2 + Math.cos(a) * d0, f.y2 + Math.sin(a) * d0, f.x2 + Math.cos(a) * d1, f.y2 + Math.sin(a) * d1); }
+        imgFx('fx_spark', f.r * 1.8, f.r * 3.6, 1, 0, true);
+      } else if (f.kind === 'flash') {
+        imgFx('fx_muzzle', f.r * 3.4, f.r * 2.2, 1, 0, true, f.rot ?? 0);
+        f.img!.setPosition(f.x1, f.y1);
+      } else if (f.kind === 'puff') {
+        imgFx('fx_explosion', f.r * 2.0, f.r * 3.2, 0.95, 0, false);
+        for (let k = 0; k < 4; k++) { const a = k * 1.6 + 0.4, d = f.r * p * 0.9; g.fillStyle(f.color, 0.55 * (1 - p)); g.fillCircle(f.x2 + Math.cos(a) * d, f.y2 + Math.sin(a) * d * 0.8, 5 * (1 - p) + 2); }
       } else if (f.kind === 'dust') {
         for (let k = 0; k < 3; k++) { const a = k * 2.1 + 0.5; g.fillStyle(f.color, 0.32 * (1 - p)); g.fillCircle(f.x2 + Math.cos(a) * f.r * p * 1.4, f.y2 - p * f.r * 0.9 + Math.sin(a) * 2, f.r * (0.45 + p * 0.5)); }
       } else if (f.kind === 'debris') {

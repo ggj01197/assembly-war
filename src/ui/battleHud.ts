@@ -8,7 +8,9 @@ import { TICK_HZ } from '../domain/battle/sim';
 import { stageLabel } from '../data/stages';
 
 /** 전투 화면의 HTML 부분: 위(남은 시간·적 기지·힌트) / 아래(내 기지·와트·카드 6장 + 스킬 칸 2개). 전장은 Phaser. */
-export interface HudHandlers { onSelect(i: number): void; onSkill(slot: number): void; onHero(): void; onHeroSkill(): void; onQuit(): void }
+/** 카드를 끌어다 놓기(클래시 로얄식): 시작·이동·놓기·취소. 좌표는 화면(클라이언트) 좌표 */
+export type DragPhase = 'start' | 'move' | 'end' | 'cancel';
+export interface HudHandlers { onDrag(phase: DragPhase, card: number, x: number, y: number): void; onSelect(i: number): void; onSkill(slot: number): void; onHero(): void; onHeroSkill(): void; onQuit(): void }
 /** 지금 눌려 있는 것: 카드 / 길을 고를 스킬 / 영웅(출격·이동) */
 export interface HudSel { card: number | null; skill: number | null; hero: boolean }
 
@@ -22,7 +24,7 @@ export class BattleHud {
   private hintT: ReturnType<typeof setTimeout> | null = null;
   private costs: number[] = [];
   private skillBtns: HTMLButtonElement[] = [];
-  private subEl: HTMLElement | null = null;
+  private subEl: HTMLElement | null = null; private crownEl: HTMLElement | null = null;
   private heroBtn: HTMLButtonElement | null = null; private heroSkillBtn: HTMLButtonElement | null = null; private heroTx: HTMLElement | null = null;
 
   constructor(root: HTMLElement) {
@@ -37,7 +39,7 @@ export class BattleHud {
     this.el.innerHTML = `
       <header class="bt-top">
         <button class="quit" type="button" aria-label="나가기">나가기</button>
-        <div class="bt-mid"><b id="btTime">3:00</b><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}</small></div>
+        <div class="bt-mid"><b id="btTime">3:00</b><i class="crowns" id="btCrowns"></i><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}</small></div>
         <div class="bt-point" id="btPoint" title="중앙 거점">거점</div>
       </header>
       <div class="bt-bars top"><span>적 기지</span><i class="hpbar"><u id="btEnemy"></u></i><em id="btEnemyN">${BASE_HP}</em></div>
@@ -45,24 +47,37 @@ export class BattleHud {
       <div class="bt-toast" id="btToast"></div>
       <footer class="bt-tray">
         <div class="bt-bars"><span>내 기지</span><i class="hpbar mine"><u id="btMine"></u></i><em id="btMineN">${BASE_HP}</em></div>
-        <div class="bt-watt"><i class="wfill"><u id="btWatt"></u><s></s></i><b id="btWattN">5</b><small>와트</small></div>
+        <div class="bt-watt ${battle.hero[0] ? 'has-hero' : ''}"><i class="wfill"><u id="btWatt"></u><s></s></i><b id="btWattN">5</b><small>와트</small>${battle.hero[0] ? `<div class="bt-hero">
+        <button class="hs" id="btHeroSkill" type="button" aria-label="영웅 기술 ${esc(battle.hero[0]!.def.skill.name)}"><u class="cd"></u><b>${esc(battle.hero[0]!.def.skill.name)}</b></button>
+        <button class="hb" id="btHeroBtn" type="button" aria-label="영웅 ${esc(battle.hero[0]!.def.name)}"><u class="cd"></u>${unitFit(battle.hero[0]!.def.build, 40, 46)}<small id="btHeroTx">출격 ${HERO_WATT}</small></button>
+      </div>` : ''}</div>
         <div class="bt-cards">
           ${battle.decks[0].map((c, i) => `<button class="card" data-i="${i}" type="button" aria-label="${esc(partName(c.build.weapon))} 와트 ${c.watt}">${unitFit(c.build, cellW, 42)}<i class="cost">${c.watt}</i><span class="nm">${esc(partName(c.build.weapon).replace(/^(팔형|탑형|어깨형) /, ''))}</span></button>`).join('')}
           ${[0, 1].map(slot => { const d = skillById(battle.skillIds[0][slot] ?? ''); return d
             ? `<button class="card skill" data-skill="${slot}" type="button" aria-label="${esc(d.name)} 와트 ${d.watt}"><i class="cost">${d.watt}</i><span class="nm">${esc(d.name)}</span><small>${KIND_LABEL[d.kind]}</small><u class="cd"></u></button>`
             : '<button class="card skill" type="button" disabled><span class="nm">스킬</span><small>비어 있음</small></button>'; }).join('')}
         </div>
-      </footer>
-      ${battle.hero[0] ? `<div class="bt-hero">
-        <button class="hs" id="btHeroSkill" type="button" aria-label="영웅 기술 ${esc(battle.hero[0]!.def.skill.name)}"><u class="cd"></u><b>${esc(battle.hero[0]!.def.skill.name)}</b></button>
-        <button class="hb" id="btHeroBtn" type="button" aria-label="영웅 ${esc(battle.hero[0]!.def.name)}"><u class="cd"></u>${unitFit(battle.hero[0]!.def.build, 40, 46)}<small id="btHeroTx">출격 ${HERO_WATT}</small></button>
-      </div>` : ''}`;
+      </footer>`;
     const q = <T extends HTMLElement>(s: string) => this.el.querySelector(s) as T;
     this.timerEl = q('#btTime'); this.enemyBar = q('#btEnemy'); this.myBar = q('#btMine'); this.enemyNum = q('#btEnemyN'); this.myNum = q('#btMineN');
     this.wattFill = q('#btWatt'); this.wattNum = q('#btWattN'); this.hintEl = q('#btHint'); this.toastEl = q('#btToast'); this.pointEl = q('#btPoint');
     this.cards = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.card[data-i]'));
-    this.cards.forEach(c => c.onclick = () => { play('uiClick'); h.onSelect(Number(c.dataset.i)); });
-    this.subEl = this.el.querySelector('#btSub');
+    this.cards.forEach(c => {
+      let sx = 0, sy = 0, down = false, dragging = false, justDragged = false;
+      c.onpointerdown = e => { down = true; dragging = false; sx = e.clientX; sy = e.clientY; };
+      c.onpointermove = e => {
+        if (!down) return;
+        if (!dragging && Math.hypot(e.clientX - sx, e.clientY - sy) > 14) { dragging = true; try { c.setPointerCapture(e.pointerId); } catch { /* 무시 */ } h.onDrag('start', Number(c.dataset.i), e.clientX, e.clientY); }
+        if (dragging) h.onDrag('move', Number(c.dataset.i), e.clientX, e.clientY);
+      };
+      const finish = (e: PointerEvent, cancel: boolean) => {
+        if (down && dragging) { h.onDrag(cancel ? 'cancel' : 'end', Number(c.dataset.i), e.clientX, e.clientY); justDragged = true; setTimeout(() => { justDragged = false; }, 60); }
+        down = false; dragging = false;
+      };
+      c.onpointerup = e => finish(e, false); c.onpointercancel = e => finish(e, true);
+      c.onclick = () => { if (justDragged) return; play('uiClick'); h.onSelect(Number(c.dataset.i)); };
+    });
+    this.subEl = this.el.querySelector('#btSub'); this.crownEl = this.el.querySelector('#btCrowns');
     this.skillBtns = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.card.skill[data-skill]'));
     this.skillBtns.forEach(c => c.onclick = () => { h.onSkill(Number(c.dataset.skill)); });
     this.heroBtn = this.el.querySelector('#btHeroBtn'); this.heroSkillBtn = this.el.querySelector('#btHeroSkill'); this.heroTx = this.el.querySelector('#btHeroTx');
@@ -90,6 +105,7 @@ export class BattleHud {
     const rem = Math.ceil(b.remaining);
     this.timerEl.textContent = `${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
     this.timerEl.classList.toggle('ot', b.overtime);
+    if (this.crownEl) this.crownEl.innerHTML = b.survival || !b.towersOn ? '' : `<b class="me">내 ${'★'.repeat(b.crowns(0)) || '☆'}</b><b class="foe">${'★'.repeat(b.crowns(1)) || '☆'} 적</b>`;
     if (b.survival && this.subEl) this.subEl.textContent = `5분 버티기 · 웨이브 ${b.wave + 1}`;
     this.enemyBar.style.width = `${Math.max(0, (b.baseHp[1] / BASE_HP) * 100)}%`;
     this.myBar.style.width = `${Math.max(0, (b.baseHp[0] / BASE_HP) * 100)}%`;

@@ -41,6 +41,8 @@ export interface BattleResult {
   baseHp: [number, number];
   seconds: number;
   overtime: boolean;
+  /** 왕관(무너뜨린 상대 포탑 수) */
+  crowns: [number, number];
   spawned: [number, number];
   kills: [number, number];
   /** 카드별 생산 수·가한 피해 (balance-sim 이 부품 승률·기여를 보기 위해, 결과 화면이 "어느 설계도가 밀렸는지" 보여 주려고) */
@@ -59,8 +61,10 @@ export interface Unit {
 
 export type BattleEvent =
   | { type: 'spawn'; unit: number; team: Team; lane: number }
-  | { type: 'attack'; from: number; to: number | null; baseOf: Team | null; lane: number; family: string }
+  | { type: 'attack'; from: number; to: number | null; baseOf: Team | null; lane: number; family: string; towerOf?: Team; /** 실제로 들어간 피해(치료는 회복량) — 화면 숫자용 */ dmg?: number }   // towerOf: 그 팀의 같은 길 포탑을 공격
   | { type: 'die'; unit: number; team: Team; lane: number; pos: number }
+  | { type: 'tower'; team: Team; lane: number; to: number; dmg: number }          // 포탑이 유닛을 쏨
+  | { type: 'towerDown'; team: Team; lane: number }                  // 포탑 파괴 (team = 무너진 쪽)
   | { type: 'point'; controller: Team | -1 }
   | { type: 'skill'; team: Team; skill: string; lane: number; unit: number | null };
 
@@ -93,8 +97,20 @@ export interface BattleOptions {
   boss?: string | null;
   /** 5분 버티기: 300초, 적 기지는 무적, 15초마다 적이 강해진다. 5분 동안 내 기지가 버티면 승리 */
   survival?: boolean;
+  /** 길마다 방어 포탑을 둔다 (기본 켬) */
+  towers?: boolean;
 }
 
+export interface Tower { hp: number; maxHp: number; cd: number }
+
+/** 길마다 양쪽에 방어 포탑 1기 (클래시 로얄식 왕관 규칙): 포탑이 서 있는 길에서는 기지를 못 때린다. 포탑 1기 파괴 = 왕관 1개, 시간이 끝나면 왕관이 많은 쪽이 이긴다. */
+export const TOWER_HP = 420;
+export const TOWER_ARMOR = 15;
+export const TOWER_DMG = 18;
+export const TOWER_RATE = 1;        // 초당 1발
+export const TOWER_RANGE = 7;       // 사거리 7 = 길 위 21 칸 (중거리 무기와 같다 — 밖에서 일방적으로 못 깎게)
+export const TOWER_NEAR = 12;       // 내(팀 0) 포탑 위치
+export const TOWER_FAR = 88;        // 적(팀 1) 포탑 위치
 export const SURVIVAL_SECONDS = 300;
 export const WAVE_SECONDS = 15;
 
@@ -125,6 +141,9 @@ export class Battle {
   readonly skillCd: [number[], number[]] = [[], []];
   readonly eff: Effects = { overload: [0, 0], shield: [0, 0], slow: [0, 0], armorDown: [0, 0], charge: [0, 0] };
   readonly hero: [HeroState | null, HeroState | null] = [null, null];
+  /** towers[팀][길] */
+  readonly towers: [Tower[], Tower[]] = [[], []];
+  readonly towersOn: boolean;
 
   private rng: Rng;
   private nextId = 1;
@@ -144,6 +163,8 @@ export class Battle {
     this.bots = opts.bots ?? [true, true];
     this.wattMult = opts.wattMult ?? [1, 1];
     this.survival = !!opts.survival;
+    this.towersOn = opts.towers !== false;
+    for (const t of [0, 1] as Team[]) this.towers[t] = Array.from({ length: LANES }, () => ({ hp: TOWER_HP, maxHp: TOWER_HP, cd: 0 }));
     if (this.survival) { this.matchSec = SURVIVAL_SECONDS; this.maxTicks = SURVIVAL_SECONDS * TICK_HZ; }
     const bd = opts.boss ? bossById(opts.boss) : undefined;
     if (bd) this.boss = { def: bd, spawned: false, unit: null, nextTick: 0 };
@@ -160,6 +181,9 @@ export class Battle {
   private count(t: Team) { return this.units.filter(u => u.team === t && !u.hero).length; }
 
   get seconds(): number { return this.tick / TICK_HZ; }
+  /** 팀 t 가 얻은 왕관 수 = 무너뜨린 상대 포탑 수 */
+  crowns(t: Team): number { return this.towersOn ? this.towers[t === 0 ? 1 : 0].filter(x => x.hp <= 0).length : 0; }
+  private towerAlive(team: Team, lane: number): boolean { return this.towersOn && this.towers[team][lane].hp > 0; }
   /** 남은 시간(초). 연장 중에는 연장 남은 시간 */
   get remaining(): number { return Math.max(0, (this.overtime ? this.matchSec + OVERTIME_SECONDS : this.matchSec) - this.seconds); }
   /** 5분 버티기의 현재 웨이브(0부터) */
@@ -192,7 +216,7 @@ export class Battle {
     if (this.over) return false;
     const sec = this.tick / TICK_HZ;
     if (!this.overtime && sec >= this.matchSec) {
-      if (this.survival || this.baseHp[0] !== this.baseHp[1]) { this.over = true; return false; }
+      if (this.survival || this.baseHp[0] !== this.baseHp[1] || this.crowns(0) !== this.crowns(1)) { this.over = true; return false; }
       this.overtime = true; // 동률이면 연장
     }
     if (this.tick >= this.maxTicks) { this.over = true; return false; }
@@ -252,6 +276,7 @@ export class Battle {
     // 3. 공격 (피해는 모아 두었다가 동시에 적용). 치료(repair)는 같은 편 부상자에게 음수 피해로 들어간다.
     const unitDamage = new Map<number, number>();
     const baseDmg: [number, number] = [0, 0];
+    const towerDmg: [number[], number[]] = [[0, 0, 0], [0, 0, 0]];
     for (const u of units) {
       if (u.ghost > 0) { u.ghost--; if (u.ghost === 0) { u.lane = u.toLane; u.moveCd = HERO_MOVE_COOLDOWN_SEC * TICK_HZ; u.cd = 0; } continue; }
       if (u.hp <= 0) continue;
@@ -277,7 +302,7 @@ export class Battle {
             }
           }
           this.credit(u, u.stats.dmg * 0.5); // 치료 기여는 절반으로 쳐서 결과 화면 순위에 반영
-          this.events.push({ type: 'attack', from: u.id, to: ally.id, baseOf: null, lane: u.lane, family: 'repair' });
+          this.events.push({ type: 'attack', from: u.id, to: ally.id, baseOf: null, lane: u.lane, family: 'repair', dmg: u.stats.dmg });
           u.cd = Math.round(TICK_HZ / rate);
         } else u.cd = 0;
         continue;
@@ -294,7 +319,7 @@ export class Battle {
         const dealt = Math.max(1, u.stats.dmg * (1 - armor / 100));
         unitDamage.set(target.id, (unitDamage.get(target.id) ?? 0) + dealt);
         this.credit(u, dealt);
-        this.events.push({ type: 'attack', from: u.id, to: target.id, baseOf: null, lane: u.lane, family: u.stats.family });
+        this.events.push({ type: 'attack', from: u.id, to: target.id, baseOf: null, lane: u.lane, family: u.stats.family, dmg: dealt });
         if (u.stats.splash > 0) {
           for (const e of units) {
             if (e === target || e.team === u.team || e.lane !== u.lane || e.ghost > 0 || e.stats.move !== target.stats.move) continue;
@@ -306,6 +331,15 @@ export class Battle {
           }
         }
         u.cd = Math.round(TICK_HZ / rate);
+      } else if (this.towerAlive(u.team === 0 ? 1 : 0, u.lane)) {
+        // 상대 포탑이 서 있으면 먼저 포탑을 친다 (공중 전용 무기는 못 침)
+        const opp: Team = u.team === 0 ? 1 : 0, tp = u.team === 0 ? TOWER_FAR : TOWER_NEAR, d = Math.abs(tp - u.pos);
+        if (u.stats.target !== 'air' && d <= range && d >= minR) {
+          const dealt = Math.max(1, u.stats.dmg * (1 - TOWER_ARMOR * (1 - u.stats.pierce) / 100));
+          towerDmg[opp][u.lane] += dealt; this.credit(u, dealt);
+          this.events.push({ type: 'attack', from: u.id, to: null, baseOf: null, towerOf: opp, lane: u.lane, family: u.stats.family, dmg: dealt });
+          u.cd = Math.round(TICK_HZ / rate);
+        } else u.cd = 0;
       } else if (Math.abs(basePos(u.team) - u.pos) <= range && Math.abs(basePos(u.team) - u.pos) >= minR && u.stats.target !== 'air') {
         const opp: Team = u.team === 0 ? 1 : 0;
         baseDmg[opp] += u.stats.dmg;
@@ -316,9 +350,38 @@ export class Battle {
         u.cd = 0;
       }
     }
+    // 3-b. 포탑 사격 (같은 길에서 가장 가까운 적 유닛 하나)
+    if (this.towersOn) {
+      for (const t of [0, 1] as Team[]) {
+        for (let l = 0; l < LANES; l++) {
+          const tw = this.towers[t][l]; if (tw.hp <= 0) continue;
+          tw.cd -= 1; if (tw.cd > 0) continue;
+          const tp = t === 0 ? TOWER_NEAR : TOWER_FAR; let tgt: Unit | null = null, best = Infinity;
+          for (const e of units) {
+            if (e.team === t || e.lane !== l || e.ghost > 0 || e.hp <= 0) continue;
+            const d = Math.abs(e.pos - tp);
+            if (d <= TOWER_RANGE * RANGE_UNIT && (d < best || (d === best && tgt && e.id < tgt.id))) { best = d; tgt = e; }
+          }
+          if (tgt) {
+            const td = Math.max(1, TOWER_DMG * (1 - this.armorOf(tgt) / 100));
+            unitDamage.set(tgt.id, (unitDamage.get(tgt.id) ?? 0) + td);
+            this.events.push({ type: 'tower', team: t, lane: l, to: tgt.id, dmg: td });
+            tw.cd = Math.round(TICK_HZ / TOWER_RATE);
+          } else tw.cd = 0;
+        }
+      }
+    }
     for (const u of units) {
       const d = unitDamage.get(u.id);
       if (d) u.hp = Math.min(u.maxHp, u.hp - d);
+    }
+    if (this.towersOn) {
+      for (const t of [0, 1] as Team[]) for (let l = 0; l < LANES; l++) {
+        const tw = this.towers[t][l], dmg = towerDmg[t][l];
+        if (!dmg || tw.hp <= 0 || (this.survival && t === 1)) continue;
+        tw.hp -= dmg;
+        if (tw.hp <= 0) { tw.hp = 0; this.events.push({ type: 'towerDown', team: t, lane: l }); }
+      }
     }
     for (const t of [0, 1] as Team[]) if (this.eff.shield[t] > 0) baseDmg[t] *= 0.5;
     if (this.survival) baseDmg[1] = 0;
@@ -340,8 +403,14 @@ export class Battle {
           const d = Math.abs(e.pos - u.pos);
           if (e.team !== u.team && e.lane === u.lane && e.ghost === 0 && canHit(u.stats, e.stats) && d <= range && d >= minR) { engaged = true; break; }
         }
-        const bd = Math.abs(basePos(u.team) - u.pos);
-        if (!engaged && bd <= range && bd >= minR && u.stats.target !== 'air') engaged = true;
+        const oppT: Team = u.team === 0 ? 1 : 0;
+        if (!engaged && this.towerAlive(oppT, u.lane)) {
+          const td = Math.abs((u.team === 0 ? TOWER_FAR : TOWER_NEAR) - u.pos);
+          if (u.stats.target !== 'air' && td <= range && td >= minR) engaged = true;
+        } else {
+          const bd = Math.abs(basePos(u.team) - u.pos);
+          if (!engaged && bd <= range && bd >= minR && u.stats.target !== 'air') engaged = true;
+        }
       }
       u.prev = u.pos; u.moving = false;
       if (!engaged) { u.pos = Math.min(LANE_LEN, Math.max(0, u.pos + (u.team === 0 ? 1 : -1) * u.stats.speed * (this.eff.slow[u.team] > 0 ? 0.6 : 1) * SPEED_UNIT / TICK_HZ)); u.moving = u.pos !== u.prev; }
@@ -493,17 +562,17 @@ export class Battle {
   }
 
   result(): BattleResult {
-    const winner: Team | -1 = this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
+    const winner: Team | -1 = this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] <= 0 || this.baseHp[1] <= 0 ? (this.baseHp[0] > this.baseHp[1] ? 0 : 1) : this.crowns(0) !== this.crowns(1) ? (this.crowns(0) > this.crowns(1) ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
     return {
-      winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime,
+      winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime, crowns: [this.crowns(0), this.crowns(1)],
       spawned: [...this.spawned], kills: [...this.kills], spawnsByCard: [[...this.spawnsByCard[0]], [...this.spawnsByCard[1]]], damageByCard: [[...this.damageByCard[0]], [...this.damageByCard[1]]],
     } as BattleResult;
   }
 }
 
 /** 봇끼리 끝까지 돌린다 (balance-sim·재생용) */
-export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number): BattleResult {
-  const b = new Battle(deckA, deckB, parts, seed);
+export function simulate(deckA: Deck, deckB: Deck, parts: Part[], seed: number, opts: BattleOptions = {}): BattleResult {
+  const b = new Battle(deckA, deckB, parts, seed, opts);
   while (b.step()) { /* 끝날 때까지 */ }
   return b.result();
 }

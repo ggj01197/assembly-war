@@ -145,6 +145,7 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .bt-top .quit { min-height: 44px; padding: 0 14px; border-radius: 12px; background: rgba(7,13,22,.7); border: 1px solid var(--line); font: 700 13px var(--body); }
 .bt-mid { display: grid; text-align: center; gap: 0; }
 .bt-mid b { font: 400 30px var(--display); text-shadow: 0 3px 0 #050b13; } .bt-mid b.ot { color: var(--enemy); }
+.crowns { display: flex; gap: 14px; justify-content: center; font-style: normal; margin-top: -2px; } .crowns b { font: 700 12px var(--body); letter-spacing: .1em; } .crowns .me { color: var(--cyan); } .crowns .foe { color: var(--enemy); }
 .bt-mid small { font: 400 11px var(--body); color: var(--steel); }
 .bt-point { min-width: 60px; min-height: 44px; display: grid; place-items: center; border-radius: 12px; background: rgba(7,13,22,.7); border: 1px solid var(--line); font: 700 12px var(--body); color: var(--steel); }
 .bt-point.mine { border-color: var(--cyan); color: var(--cyan); } .bt-point.enemy { border-color: var(--enemy); color: var(--enemy); }
@@ -166,7 +167,7 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .wfill s { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 2px), rgba(7,13,22,.8) calc(10% - 2px), rgba(7,13,22,.8) 10%); }
 .bt-watt b { font: 400 24px var(--display); color: var(--bronze); text-align: center; } .bt-watt small { font: 400 11px var(--body); color: var(--steel); }
 .bt-cards { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; pointer-events: auto; }
-.card { position: relative; height: 84px; display: grid; place-items: center; align-content: center; border-radius: 10px; background: rgba(23,39,64,.95); border: 2px solid var(--line); overflow: hidden; padding: 0; }
+.card { touch-action: none; position: relative; height: 84px; display: grid; place-items: center; align-content: center; border-radius: 10px; background: rgba(23,39,64,.95); border: 2px solid var(--line); overflow: hidden; padding: 0; }
 .card .cost { position: absolute; left: 3px; top: 2px; font: 400 14px var(--display); color: var(--bronze); font-style: normal; text-shadow: 0 1px 2px #000; }
 .card .nm { display: none; }
 .card.ready { border-color: #3fb98a; } .card.short { opacity: .55; } .card.on { border-color: #fff; box-shadow: 0 0 0 2px var(--cyan), 0 0 14px rgba(95,211,255,.6); transform: translateY(-6px); opacity: 1; }
@@ -176,13 +177,14 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .card.skill.ready { border-color: #b69cff; box-shadow: 0 0 10px rgba(122,92,255,.45); } .card.skill.short { opacity: .7; }
 .card .cd, .bt-hero .cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(5,10,18,.72); pointer-events: none; }
 /* 영웅 버튼 — 트레이 위 오른쪽에 따로 */
-.bt-hero { position: absolute; right: 10px; bottom: calc(var(--safe-bottom) + 186px); display: grid; gap: 6px; justify-items: end; }
+.bt-hero { display: flex; flex-direction: row-reverse; gap: 5px; align-items: stretch; }
+.bt-watt.has-hero { grid-template-columns: minmax(0, 1fr) 30px auto auto; }
 .bt-hero button { position: relative; overflow: hidden; border-radius: 14px; background: rgba(36,28,10,.94); border: 2px solid #d6a24f; color: var(--text); display: grid; place-items: center; padding: 0; }
-.bt-hero .hb { width: 64px; height: 76px; align-content: center; gap: 0; } .bt-hero .hb small { font: 700 11px var(--body); color: var(--bronze); position: relative; }
+.bt-hero .hb { width: 62px; height: 58px; align-content: center; gap: 0; } .bt-hero .hb small { font: 700 11px var(--body); color: var(--bronze); position: relative; }
 .bt-hero .hb .unit-fit, .bt-hero .hb img { pointer-events: none; }
 .bt-hero .hb.ready { box-shadow: 0 0 14px rgba(255,208,103,.7); } .bt-hero .hb.short { opacity: .65; } .bt-hero .hb.dead { opacity: .8; border-color: var(--line); }
 .bt-hero .hb.deployed { border-color: #ffe08a; } .bt-hero .hb.on { border-color: #fff; box-shadow: 0 0 0 2px var(--cyan), 0 0 16px rgba(95,211,255,.65); }
-.bt-hero .hs { width: 64px; height: 38px; font: 700 12px var(--body); border-color: #7a5cff; background: rgba(34,28,66,.94); } .bt-hero .hs b { position: relative; }
+.bt-hero .hs { width: 54px; height: 58px; font: 700 12px var(--body); border-color: #7a5cff; background: rgba(34,28,66,.94); } .bt-hero .hs b { position: relative; }
 .bt-hero .hs.ready { border-color: #b69cff; box-shadow: 0 0 10px rgba(122,92,255,.55); } .bt-hero .hs.off { opacity: .35; }
 
 /* ───── 결과 ───── */

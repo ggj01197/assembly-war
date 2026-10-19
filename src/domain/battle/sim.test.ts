@@ -38,7 +38,7 @@ describe('전투 시뮬 (결정론 틱, 기획안 FINAL §5)', () => {
   it('지상 전용 무기는 공중 유닛을 한 기도 못 잡는다 (대공 상성)', () => {
     // 호버 미사일(공중) 대 지상 전용 기관포 보병: 보병(팀 1)의 격파 수는 0
     for (const seed of [3, 4, 5]) {
-      const r = simulate(deck(hoverMissile), deck(biped), PARTS, seed);
+      const r = simulate(deck(hoverMissile), deck(biped), PARTS, seed, { towers: false });   // 포탑은 공중도 쏘므로 끄고 유닛 상성만 본다
       expect(r.kills[1]).toBe(0);
       expect(r.kills[0]).toBeGreaterThan(0); // 미사일은 대공·대지 모두 가능
     }
