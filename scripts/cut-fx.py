@@ -24,3 +24,4 @@ for i, pid in enumerate(ids):
     bb = rgba.getbbox()
     if bb: rgba = rgba.crop(bb)
     rgba.save(os.path.join(out, pid + '.png')); print(pid, rgba.size)
+# (후처리) fx_explosion 은 흰 중심이 불투명 흰 덩어리로 보여 파랑을 줄여 노란빛으로: G×0.82, B×0.38 (손으로 한 번 적용함)

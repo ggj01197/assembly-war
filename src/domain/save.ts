@@ -25,6 +25,12 @@ export interface SaveData {
   loadout: Loadout;
   /** 5분 버티기 최고 기록(초) */
   survivalBest: number;
+  /** 부품 조각(강화 재료): 부품 id → 개수 */
+  copies: Record<string, number>;
+  /** 보급: 연 상자 수 · 에픽 없이 연 상자 수(천장) · 다음 무료 상자 시각(ms) */
+  supply: { opened: number; pity: number; freeAt: number };
+  /** 누적 승리 수 (3승마다 보급권 1) */
+  winCount: number;
 }
 
 export const STARTER_DECK: Build[] = [
@@ -46,6 +52,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     flags: { assembled: false, firstWin: false },
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
+    copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
   };
 }
 
@@ -93,6 +100,14 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
   }
   out.loadout = repairLoadout((r as { loadout?: unknown }).loadout, commanderLevel(out.commanderExp).level);
   out.survivalBest = Math.floor(num((r as { survivalBest?: unknown }).survivalBest, 0, 0, 300));
+  if (r.copies && typeof r.copies === 'object') {
+    for (const id of allPartIds) { const v = (r.copies as Record<string, unknown>)[id]; if (typeof v === 'number' && Number.isFinite(v) && v > 0) out.copies[id] = Math.min(9999, Math.floor(v)); }
+  }
+  if (r.supply && typeof r.supply === 'object') {
+    const sp = r.supply as Partial<SaveData['supply']>;
+    out.supply = { opened: Math.floor(num(sp.opened, 0)), pity: Math.floor(num(sp.pity, 0, 0, 99)), freeAt: num(sp.freeAt, 0, 0, 1e15) };
+  }
+  out.winCount = Math.floor(num((r as { winCount?: unknown }).winCount, 0));
   out.version = SAVE_VERSION;
   return out;
 }

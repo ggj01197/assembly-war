@@ -15,7 +15,10 @@ export function settle(save: SaveData, stage: StageLike, win: boolean, baseHpLef
   if (win) {
     const first = rec.clears === 0;
     const k = first ? 1 : REPEAT_RATIO;
-    rewards = { ore: Math.round(stage.rewardOre * k), exp: Math.round(stage.rewardExp * k), tickets: first ? 1 : 0, firstClear: first };
+    next.winCount = (next.winCount ?? 0) + 1;
+    // 보급권: 처음 이기면 1(보스 작전은 2), 그 뒤 3승마다 1
+    const tickets = (first ? ((stage as { boss?: string }).boss ? 2 : 1) : 0) + (next.winCount % 3 === 0 ? 1 : 0);
+    rewards = { ore: Math.round(stage.rewardOre * k), exp: Math.round(stage.rewardExp * k), tickets, firstClear: first };
     rec.clears += 1;
     rec.bestBaseHp = Math.max(rec.bestBaseHp, Math.max(0, Math.round(baseHpLeft)));
     next.flags.firstWin = true;

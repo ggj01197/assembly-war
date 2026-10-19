@@ -5,13 +5,14 @@ import { Battle, type Deck } from '../domain/battle/sim';
 import { settle, settleSurvival } from '../domain/rewards';
 import { store, boot, update, flushSave } from '../game/store';
 import { loadSprites } from '../game/unitLayout';
-import { setSoundEnabled, playMusic } from '../native/audio';
+import { setSoundEnabled, playMusic, preloadMusic } from '../native/audio';
 import { runOpening } from './opening';
 import { mountHangar } from './hangar';
 import { mountAssembly } from './assembly';
 import { mountResult, type ResultData } from './result';
 import { BattleHud } from './battleHud';
 import { commanderLevel } from '../domain/save';
+import { cardLevel } from '../domain/supply';
 
 export interface Screen { el: HTMLElement; show(arg?: unknown): void; hide(): void }
 export interface Nav {
@@ -48,7 +49,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
   async function startBattle(stageId: string) {
     const stage = stageById(stageId); if (!stage) return;
     const s = store.getState().save;
-    const player: Deck = { cards: s.deck.map(build => ({ build, level: 1 })) };
+    const player: Deck = { cards: s.deck.map(build => ({ build, level: cardLevel(build, s.partLevels) })) };
     const enemy: Deck = { cards: stage.enemy.map(build => ({ build, level: stage.enemyLevel })) };
     const battle = new Battle(player, enemy, PARTS, (Date.now() & 0x7fffffff) >>> 0, {
       bots: [false, true], wattMult: [1, stage.enemyWattMult],
@@ -58,7 +59,8 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     });
     if (current) screens[current].hide();
     current = null;
-    playMusic('battle');
+    if (stage.boss) preloadMusic('boss');
+    playMusic(stage.survival ? 'survival' : 'battle');   // 보스는 나타나는 순간 전장에서 'boss' 로 바꾼다
     const finish = () => { game.scene.stop('battle'); };
     game.scene.start('battle', {
       stage, battle, hud, reducedMotion: s.settings.reducedMotion,

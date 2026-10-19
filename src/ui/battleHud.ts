@@ -94,6 +94,13 @@ export class BattleHud {
     this.el.hidden = false;
   }
 
+  /** 보스 등장 배너: 초상화 + 이름, 2.6초 뒤 사라진다 */
+  bossBanner(id: string, name: string, title: string): void {
+    const b = document.createElement('div'); b.className = 'bt-boss';
+    b.innerHTML = `<img src="art/portraits/${id}.jpg" alt="" draggable="false"><span><small>${esc(title)}</small><b>${esc(name)}</b></span>`;
+    this.el.appendChild(b); setTimeout(() => b.classList.add('out'), 2200); setTimeout(() => b.remove(), 2700);
+  }
+
   toast(msg: string): void {
     this.toastEl.textContent = msg; this.toastEl.classList.add('on');
     if (this.toastT) clearTimeout(this.toastT);

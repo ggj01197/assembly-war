@@ -1,0 +1,28 @@
+// 격납고 시트(보급·확률표·강화·상점·장비)와 보스 배너 캡처 (개발 서버 5190 필요): node scripts/ui-shots.mjs [폭=390] [높이=844]
+import { chromium } from 'playwright-core';
+import { fileURLToPath } from 'node:url';
+const W = Number(process.argv[2] ?? 390), H = Number(process.argv[3] ?? 844);
+const OUT = fileURLToPath(new URL('../../00_PROJECT_CONTROL/shots/', import.meta.url));
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage(); const errs = [];
+page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])');
+await page.evaluate(() => window.__aw.store.setState(s => ({ save: { ...s.save, tickets: 3, ore: 900, commanderExp: 2500, copies: { legs_biped_light: 2, body_arm_scout: 5, wpn_arm_gatling: 1, wpn_laser_beam: 3 } } })));
+await page.click('.hg-nav #nvSupply'); await page.waitForTimeout(400);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_1_supply.png` });
+await page.click('#spOpen'); await page.waitForTimeout(900);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_2_opened.png` });
+await page.click('#spOdds'); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_3_odds.png` });
+await page.click('#sheetClose'); await page.click('#nvUpgrade'); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_4_upgrade.png` });
+await page.locator('.up-btn').first().click(); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_5_upgraded.png` });
+await page.click('#sheetClose'); await page.click('#nvShop'); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_6_shop.png` });
+await page.click('#sheetClose'); await page.click('#hgGear'); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_7_gear.png` });
+console.log('errors', errs.slice(0, 5));
+await browser.close();

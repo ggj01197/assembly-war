@@ -4,17 +4,22 @@ import { CHAPTERS, STAGES, SURVIVAL, isUnlocked } from '../data/stages';
 import { store, update } from '../game/store';
 import { SKILLS, HEROES, KIND_LABEL, heroById } from '../domain/loadout';
 import { commanderLevel } from '../domain/save';
+import { freeChestReady } from '../domain/supply';
 import { levelMultiplier } from '../domain/upgrade';
 import { unitFit, partName, esc, TARGET_LABEL } from './unitView';
 import { play } from '../native/audio';
 import type { Nav, Screen } from './app';
+import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
 
 /** 격납고(홈): 선택한 설계도를 크게 보여 주고, 조립·출격으로 보낸다. */
 export function mountHangar(root: HTMLElement, nav: Nav): Screen {
   const el = document.createElement('div');
   el.className = 'screen hangar'; el.hidden = true;
   root.appendChild(el);
-  let sel = 0, sheet: false | 'stage' | 'gear' = false;
+  let sel = 0, sheet: false | 'stage' | 'gear' | SheetKind = false;
+  const sst: SheetState = { drops: null, upTab: 'legs' };
+  let tick: ReturnType<typeof setInterval> | null = null;
+  const toast = (msg: string) => { const t = document.createElement('div'); t.className = 'hg-toast'; t.textContent = msg; el.appendChild(t); setTimeout(() => t.remove(), 1800); };
   let chap: 1 | 2 | 3 | 'sv' = 1;
 
   const slotTitle = (b: Build) => partName(b.weapon);
@@ -34,7 +39,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       <div class="bg"></div>
       <header class="hg-top">
         <div class="hg-cmd"><b>Lv.${lv.level}</b><span>정비사령관</span><i class="bar"><u style="width:${Math.min(100, (lv.into / lv.need) * 100)}%"></u></i></div>
-        <div class="hg-res"><span>광석 <b>${s.ore.toLocaleString('ko-KR')}</b></span></div>
+        <div class="hg-res"><span>보급권 <b>${s.tickets}</b></span><span>광석 <b>${s.ore.toLocaleString('ko-KR')}</b></span></div>
       </header>
       <section class="hg-stage">
         <div class="hg-name"><small>설계도 ${sel + 1}</small><b>${esc(slotTitle(b))}</b><em>${esc(partName(b.legs))} · ${esc(partName(b.body))}${b.accessory ? ' · ' + esc(partName(b.accessory)) : ''}</em></div>
@@ -50,13 +55,18 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       <section class="hg-slots">
         ${s.deck.map((d, i) => { const w = assemble(d, PARTS).watt; return `<button class="slot ${i === sel ? 'on' : ''}" data-i="${i}" type="button" aria-label="설계도 ${i + 1}">${unitFit(d, 50, 54)}<i>${w}</i></button>`; }).join('')}
       </section>
+      <nav class="hg-nav">
+        <button class="nv" id="nvSupply" type="button">보급${s.tickets > 0 || freeChestReady(s, Date.now()) ? '<i class="dot"></i>' : ''}</button>
+        <button class="nv" id="nvUpgrade" type="button">강화</button>
+        <button class="nv" id="nvShop" type="button">상점</button>
+      </nav>
       <footer class="hg-actions">
         <button class="btn ${guideAssemble ? 'pulse' : ''}" id="hgAssemble" type="button">조립${guideAssemble ? '<em>NEW</em>' : ''}</button>
         <button class="btn" id="hgGear" type="button">장비</button>
         <button class="btn primary big ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button">출격</button>
       </footer>
       ${guideAssemble ? '<div class="hg-tip">첫 승리! 설계도를 바꿔 더 강해져 보세요.</div>' : ''}
-      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : ''}`;
+      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : ''}`;
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });
     (el.querySelector('#hgAssemble') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openAssembly(sel); };
@@ -78,7 +88,11 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       });
       render();
     });
-    el.querySelector('#sheetClose')?.addEventListener('click', () => { play('uiBack'); sheet = false; render(); });
+    for (const [id, k] of [['#nvSupply', 'supply'], ['#nvUpgrade', 'upgrade'], ['#nvShop', 'shop']] as const) {
+      (el.querySelector(id) as HTMLButtonElement).onclick = () => { play('uiClick'); sst.drops = null; sheet = k; render(); };
+    }
+    if (sheet === 'supply' || sheet === 'odds' || sheet === 'upgrade' || sheet === 'shop') bindSheets(el, sheet, sst, { rerender: render, toast, open: k => { sheet = k; render(); } });
+    el.querySelector('#sheetClose')?.addEventListener('click', () => { play('uiBack'); sheet = false; sst.drops = null; render(); });
     el.querySelector('.sheet-dim')?.addEventListener('click', () => { sheet = false; render(); });
     el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked):not(.gear-hero):not(.gear-skill)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
   }
@@ -94,7 +108,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
           ${HEROES.map(h => {
             const open = h.unlock <= lv;
             return `<button class="stage gear-hero ${open ? '' : 'locked'} ${lo.hero === h.id ? 'picked' : ''}" data-id="${h.id}" type="button" ${open ? '' : 'disabled'}>
-              <span class="uf">${unitFit(h.build, 44, 50)}</span>
+              <img class="portrait" src="art/portraits/${h.id}.jpg" alt="" draggable="false">
               <span class="tx"><b>${esc(h.name)} <em>${esc(h.role)}</em></b><small>${esc(h.skill.name)}: ${esc(h.skill.desc)}</small></span>
               <span class="rw">${lo.hero === h.id ? '<em>✓ 선택</em>' : open ? '' : `Lv.${h.unlock}`}</span>
             </button>`; }).join('')}
@@ -107,7 +121,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
               <span class="rw">${on ? '<em>✓ 장착</em>' : open ? '' : `Lv.${k.unlock}`}</span>
             </button>`; }).join('')}
         </div>
-        <p class="gear-note">${esc(heroById(lo.hero)?.name ?? '')} 출격 · 스킬 ${lo.skills.length}/2 — 전투 중 카드 줄의 보라색 칸이 스킬, 오른쪽 금색 버튼이 영웅입니다.</p>
+        <p class="gear-note">${esc(heroById(lo.hero)?.name ?? '')} 출격 · 스킬 ${lo.skills.length}/2 — 전투 중 카드 줄의 보라색 칸이 스킬, 와트 줄 오른쪽의 금색 버튼이 영웅입니다.</p>
       </div>`;
   }
 
@@ -142,5 +156,9 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </div>`;
   }
 
-  return { el, show() { sheet = false; el.hidden = false; render(); }, hide() { el.hidden = true; } };
+  return {
+    el,
+    show() { sheet = false; sst.drops = null; el.hidden = false; render(); if (tick) clearInterval(tick); tick = setInterval(() => { if (!el.hidden && sheet === 'supply' && !sst.drops) render(); }, 30000); },
+    hide() { el.hidden = true; if (tick) { clearInterval(tick); tick = null; } },
+  };
 }

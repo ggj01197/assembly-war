@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { LANES, TICK_HZ, BASE_HP, TOWER_NEAR, TOWER_FAR, POINT_LANE, POINT_POS, POINT_RADIUS, POINT_CAPTURE_SEC, type Battle, type BattleEvent, type Unit } from '../../domain/battle/sim';
 import { layoutUnit, spriteUrl, spriteUrlBack } from '../unitLayout';
 import { PARTS } from '../../data/parts';
-import { play } from '../../native/audio';
+import { play, playMusic } from '../../native/audio';
 import type { BattleHud, DragPhase } from '../../ui/battleHud';
 import { skillById, heroById, HERO_WATT, HERO_MOVE_SEC } from '../../domain/loadout';
 import { bossById } from '../../data/bosses';
@@ -479,6 +479,7 @@ export class BattleScene extends Phaser.Scene {
       case 'boss_arrive': {
         const d = b.bossDef; if (!d) break;
         this.cfg.hud.toast(`경고! ${d.name} 출현`); play('baseHit');
+        playMusic('boss'); this.cfg.hud.bossBanner(d.id, d.name, d.title);
         if (!calm) this.cameras.main.shake(300, 0.008);
         this.fx.push({ kind: 'ring', x1: this.W / 2, y1: this.y0 + 20, x2: this.W / 2, y2: this.y0 + 20, t: 0, dur: 0.7, color: 0xff4d4d, r: this.W * 0.45 });
         break;

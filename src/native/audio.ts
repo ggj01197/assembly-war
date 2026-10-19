@@ -139,7 +139,7 @@ export function play(name: keyof typeof BANK | string, minGap = 0): void {
 
 // ───────── BGM ─────────
 // public/audio/bgm/<이름>.mp3 (ElevenLabs, 가사 없음 전사 확인). 쓸 때 한 번 내려받아 해독하고 1초 크로스페이드로 바꾼다.
-export type MusicName = 'hangar' | 'battle';
+export type MusicName = 'hangar' | 'battle' | 'boss' | 'survival';
 const MUSIC_VOL = 0.32, FADE = 1.0;
 const musicBuf: Partial<Record<MusicName, AudioBuffer>> = {};
 const musicLoading: Partial<Record<MusicName, Promise<AudioBuffer | null>>> = {};
@@ -157,6 +157,9 @@ function loadMusic(name: MusicName): Promise<AudioBuffer | null> {
     .catch(() => null);
   return musicLoading[name]!;
 }
+
+/** 곧 쓸 곡을 미리 내려받아 해독해 둔다(보스 곡처럼 갑자기 바꿀 때 끊기지 않게). */
+export function preloadMusic(name: MusicName): void { void loadMusic(name); }
 
 /** 배경 음악을 바꾼다. null 이면 서서히 끈다. 같은 곡이 이미 나오면 아무것도 안 한다. */
 export function playMusic(name: MusicName | null): void {
