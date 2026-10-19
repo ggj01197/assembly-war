@@ -1,5 +1,6 @@
 import type { Build } from './assemble';
 import { defaultLoadout, repairLoadout, type Loadout } from './loadout';
+import type { DailyState, AttendState, AdState, MissionType, AdSlot } from './daily';
 
 /**
  * 세이브 (TD-006): 버전 필드 + 읽을 때마다 고치기(repair). 읽지 못한 세이브는 새 게임이 덮어쓰기 전에 호출 쪽이 격리한다.
@@ -31,6 +32,11 @@ export interface SaveData {
   supply: { opened: number; pity: number; freeAt: number };
   /** 누적 승리 수 (3승마다 보급권 1) */
   winCount: number;
+  /** 일일 임무(오늘 3개) · 출석 28일 · 오늘 본 광고 · 광고 제거 보유(상품 구매 뒤 켜짐) */
+  daily: DailyState;
+  attend: AttendState;
+  ads: AdState;
+  noAds: boolean;
 }
 
 export const STARTER_DECK: Build[] = [
@@ -53,6 +59,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
     copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
+    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false,
   };
 }
 
@@ -108,6 +115,27 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
     out.supply = { opened: Math.floor(num(sp.opened, 0)), pity: Math.floor(num(sp.pity, 0, 0, 99)), freeAt: num(sp.freeAt, 0, 0, 1e15) };
   }
   out.winCount = Math.floor(num((r as { winCount?: unknown }).winCount, 0));
+  const MT: MissionType[] = ['win', 'deploy', 'kills', 'towers', 'skill', 'hero', 'upgrade', 'chest'];
+  const AS: AdSlot[] = ['result_double', 'loss_ore', 'free_chest', 'chest_extra', 'survival_continue', 'mission_refresh', 'salvage_full', 'boss_extra'];
+  if (r.daily && typeof r.daily === 'object') {
+    const d = r.daily as Partial<DailyState>;
+    const ms = Array.isArray(d.missions) ? d.missions.filter(m => m && MT.includes((m as { type: MissionType }).type)).slice(0, 3).map(m => {
+      const x = m as { type: MissionType; target?: unknown; progress?: unknown; claimed?: unknown };
+      const target = Math.max(1, Math.floor(num(x.target, 1, 1, 99)));
+      return { type: x.type, target, progress: Math.min(target, Math.floor(num(x.progress, 0, 0, 999))), claimed: !!x.claimed };
+    }) : [];
+    out.daily = { date: typeof d.date === 'string' ? d.date : '', missions: ms.length === 3 ? ms : [], refreshed: !!d.refreshed };
+  }
+  if (r.attend && typeof r.attend === 'object') {
+    const a = r.attend as Partial<AttendState>;
+    out.attend = { claimed: Math.floor(num(a.claimed, 0, 0, 9999)), lastDate: typeof a.lastDate === 'string' ? a.lastDate : '' };
+  }
+  if (r.ads && typeof r.ads === 'object') {
+    const a = r.ads as Partial<AdState>, by: Partial<Record<AdSlot, number>> = {};
+    for (const k of AS) { const v = (a.bySlot as Record<string, unknown> | undefined)?.[k]; if (typeof v === 'number' && Number.isFinite(v) && v > 0) by[k] = Math.min(99, Math.floor(v)); }
+    out.ads = { date: typeof a.date === 'string' ? a.date : '', used: Math.floor(num(a.used, 0, 0, 99)), bySlot: by };
+  }
+  out.noAds = !!(r as { noAds?: unknown }).noAds;
   out.version = SAVE_VERSION;
   return out;
 }

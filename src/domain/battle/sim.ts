@@ -43,6 +43,8 @@ export interface BattleResult {
   overtime: boolean;
   /** 왕관(무너뜨린 상대 포탑 수) */
   crowns: [number, number];
+  /** 일일 임무·광고 회수에 쓰는 통계 */
+  skillUses: [number, number]; heroDeploys: [number, number]; wattSpent: [number, number];
   spawned: [number, number];
   kills: [number, number];
   /** 카드별 생산 수·가한 피해 (balance-sim 이 부품 승률·기여를 보기 위해, 결과 화면이 "어느 설계도가 밀렸는지" 보여 주려고) */
@@ -128,6 +130,11 @@ export class Battle {
   readonly spawnsByCard: [number[], number[]];
   readonly damageByCard: [number[], number[]];
   readonly pointTimer: [number, number] = [0, 0];
+  readonly skillUses: [number, number] = [0, 0];
+  readonly heroDeploys: [number, number] = [0, 0];
+  readonly wattSpent: [number, number] = [0, 0];
+  /** 5분 버티기 이어하기(광고)를 쓴 횟수 */
+  continued = 0;
   controller: Team | -1 = -1;
   tick = 0;
   overtime = false;
@@ -200,7 +207,7 @@ export class Battle {
     if (!card || lane < 0 || lane >= LANES) return false;
     if (card.watt > this.watt[team] + 1e-9) return false;
     if (this.count(team) >= MAX_UNITS_PER_TEAM) return false;
-    this.watt[team] -= card.watt;
+    this.watt[team] -= card.watt; this.wattSpent[team] += card.watt;
     const u: Unit = { id: this.nextId++, team, lane, pos: team === 0 ? 0 : LANE_LEN, prev: team === 0 ? 0 : LANE_LEN, moving: false, hero: null, ghost: 0, toLane: lane, moveCd: 0, hp: 0, maxHp: 0, stats: card.stats, cd: 0, card: cardIdx };
     if (this.survival && team === 1) { const w = this.wave; u.stats = { ...card.stats, hp: Math.round(card.stats.hp * (1 + 0.07 * w)), dmg: Math.round(card.stats.dmg * (1 + 0.05 * w) * 100) / 100 }; }
     u.hp = u.maxHp = u.stats.hp;
@@ -467,7 +474,7 @@ export class Battle {
     if (!def || this.skillCd[team][slot] > 0 || def.watt > this.watt[team] + 1e-9) return false;
     if (def.needsLane && (lane < 0 || lane >= LANES)) return false;
     const opp: Team = team === 0 ? 1 : 0, dur = Math.round((def.dur ?? 0) * TICK_HZ);
-    this.watt[team] -= def.watt;
+    this.watt[team] -= def.watt; this.wattSpent[team] += def.watt; this.skillUses[team]++;
     this.skillCd[team][slot] = SKILL_COOLDOWN_SEC * TICK_HZ;
     switch (def.id) {
       case 'sk_bomb': for (const e of this.units) if (e.team === opp && e.lane === lane && e.ghost === 0) e.hp -= 80; break;
@@ -487,7 +494,7 @@ export class Battle {
   deployHero(team: Team, lane: number): boolean {
     const h = this.hero[team];
     if (this.over || !h || h.unit !== null || h.respawn > 0 || lane < 0 || lane >= LANES || this.watt[team] + 1e-9 < HERO_WATT) return false;
-    this.watt[team] -= HERO_WATT;
+    this.watt[team] -= HERO_WATT; this.wattSpent[team] += HERO_WATT; this.heroDeploys[team]++;
     const st = { ...h.def.stats, hp: Math.round(h.def.stats.hp * h.mult), dmg: Math.round(h.def.stats.dmg * h.mult) };
     const pos = team === 0 ? 0 : LANE_LEN;
     const u: Unit = { id: this.nextId++, team, lane, pos, prev: pos, moving: false, hero: h.def.id, ghost: 0, toLane: lane, moveCd: 0, hp: st.hp, maxHp: st.hp, stats: st, cd: 0, card: -1 };
@@ -561,10 +568,19 @@ export class Battle {
     return saving && this.hero[t]!.unit === null;
   }
 
+  /** 5분 버티기 이어하기(광고): 내 기지를 절반 체력으로 되살리고 30초 보호막, 기지 앞 적은 쓸어낸다 */
+  revive(): void {
+    if (!this.survival || !this.over) return;
+    this.over = false; this.continued++;
+    this.baseHp[0] = BASE_HP * 0.5; this.eff.shield[0] = Math.max(this.eff.shield[0], 30 * TICK_HZ);
+    for (const u of this.units) if (u.team === 1 && !u.hero && u.pos < 40) u.hp = 0;
+    this.units.splice(0, this.units.length, ...this.units.filter(u => u.hp > 0));
+  }
+
   result(): BattleResult {
     const winner: Team | -1 = this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] <= 0 || this.baseHp[1] <= 0 ? (this.baseHp[0] > this.baseHp[1] ? 0 : 1) : this.crowns(0) !== this.crowns(1) ? (this.crowns(0) > this.crowns(1) ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
     return {
-      winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime, crowns: [this.crowns(0), this.crowns(1)],
+      winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime, crowns: [this.crowns(0), this.crowns(1)], skillUses: [...this.skillUses], heroDeploys: [...this.heroDeploys], wattSpent: [...this.wattSpent],
       spawned: [...this.spawned], kills: [...this.kills], spawnsByCard: [[...this.spawnsByCard[0]], [...this.spawnsByCard[1]]], damageByCard: [[...this.damageByCard[0]], [...this.damageByCard[1]]],
     } as BattleResult;
   }

@@ -75,6 +75,14 @@ export function openChest(save: SaveData, rng: Rng = Math.random): { save: SaveD
   return { save: next, drops };
 }
 
+/** 상자 한 칸 더(광고 A4): 같은 확률표로 한 칸을 더 뽑아 보상에 반영한다 */
+export function extraDrop(save: SaveData, rng: Rng = Math.random): { save: SaveData; drop: Drop } {
+  const next: SaveData = JSON.parse(JSON.stringify(save));
+  const drop = rollOne(rng);
+  apply(next, [drop]);
+  return { save: next, drop };
+}
+
 export const freeChestReady = (save: SaveData, now: number): boolean => now >= save.supply.freeAt;
 export const freeChestWaitMs = (save: SaveData, now: number): number => Math.max(0, save.supply.freeAt - now);
 

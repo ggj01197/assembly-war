@@ -25,6 +25,11 @@
 
         </activity>
 
+        <!-- AdMob 앱 ID (Android): 지금은 구글 공식 테스트 앱 ID. 출시 빌드에서 AdMob 「조립전쟁(Android)」 앱 ID 로 교체 (src/config/ads.ts 도 함께) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -39,4 +44,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 광고 ID(Android 13+): 보상형 광고에 필요. Play 콘솔 광고 ID 선언과 처리방침도 함께 -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 </manifest>

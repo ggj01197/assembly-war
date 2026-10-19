@@ -10,6 +10,17 @@ page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m
 await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
 await page.waitForSelector('.screen.hangar:not([hidden])');
 await page.evaluate(() => window.__aw.store.setState(s => ({ save: { ...s.save, tickets: 3, ore: 900, commanderExp: 2500, copies: { legs_biped_light: 2, body_arm_scout: 5, wpn_arm_gatling: 1, wpn_laser_beam: 3 } } })));
+await page.click('#nvMissions'); await page.waitForTimeout(400);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_0a_missions.png` });
+await page.evaluate(() => window.__aw.store.setState(s => { const sv = JSON.parse(JSON.stringify(s.save)); sv.daily.missions[0].progress = sv.daily.missions[0].target; return { save: sv }; }));
+await page.click('#sheetClose'); await page.click('#nvMissions'); await page.waitForTimeout(300);
+await page.locator('.ms-claim').first().click(); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_0b_mission_claimed.png` });
+await page.click('#sheetClose'); await page.click('#nvAttend'); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_0c_attend.png` });
+await page.click('#atClaim'); await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_u_0d_attend_done.png` });
+await page.click('#sheetClose');
 await page.click('.hg-nav #nvSupply'); await page.waitForTimeout(400);
 await page.screenshot({ path: `${OUT}/${W}x${H}_u_1_supply.png` });
 await page.click('#spOpen'); await page.waitForTimeout(900);

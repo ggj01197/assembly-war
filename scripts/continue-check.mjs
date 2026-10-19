@@ -1,0 +1,24 @@
+// 5분 버티기 이어하기(광고 A5) 점검: 강제로 지게 해 결과 화면의 이어하기 단추 → 판 재개 → 정산 보류를 확인한다 (개발 서버 5190 필요)
+import { chromium } from 'playwright-core';
+import { fileURLToPath } from 'node:url';
+const OUT = fileURLToPath(new URL('../../00_PROJECT_CONTROL/shots/', import.meta.url));
+const W=390,H=844;
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage(); const errs=[]; page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type()==='error') errs.push(m.text()); });
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])');
+await page.evaluate(() => window.__aw.store.setState(s => { const sv = JSON.parse(JSON.stringify(s.save)); sv.stages['c1-7'] = { clears: 1, bestBaseHp: 500 }; return { save: sv }; }));
+await page.evaluate(() => window.__aw.startBattle('survival'));
+await page.waitForSelector('.screen.battle:not([hidden])'); await page.waitForTimeout(4000);
+await page.evaluate(() => { const b = window.__aw.battle; b.baseHp[0] = 0; });
+await page.waitForSelector('.screen.result:not([hidden])', { timeout: 8000 });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${OUT}/390x844_cont_result.png` });
+const hasCont = await page.locator('#rsCont').count();
+await page.locator('#rsCont').click(); await page.waitForSelector('.screen.battle:not([hidden])', { timeout: 8000 });
+await page.waitForTimeout(2500);
+await page.screenshot({ path: `${OUT}/390x844_cont_resumed.png` });
+const state = await page.evaluate(() => ({ base: window.__aw.battle.baseHp[0], over: window.__aw.battle.over, cont: window.__aw.battle.continued, ads: window.__aw.store.getState().save.ads, best: window.__aw.store.getState().save.survivalBest }));
+console.log('hasCont', hasCont, JSON.stringify(state), errs.slice(0,4));
+await browser.close();

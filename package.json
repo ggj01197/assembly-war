@@ -15,6 +15,7 @@
     "verify:combo": "node scripts/combo-check.mjs"
   },
   "dependencies": {
+    "@capacitor-community/admob": "^8.2.1",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.3",

@@ -9,7 +9,9 @@ import { levelMultiplier } from '../domain/upgrade';
 import { unitFit, partName, esc, TARGET_LABEL } from './unitView';
 import { play } from '../native/audio';
 import type { Nav, Screen } from './app';
-import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
+import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
+import { canAttend, missionDone, todayStr } from '../domain/daily';
+import { touchDaily } from './adFlow';
 
 /** 격납고(홈): 선택한 설계도를 크게 보여 주고, 조립·출격으로 보낸다. */
 export function mountHangar(root: HTMLElement, nav: Nav): Screen {
@@ -17,7 +19,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
   el.className = 'screen hangar'; el.hidden = true;
   root.appendChild(el);
   let sel = 0, sheet: false | 'stage' | 'gear' | SheetKind = false;
-  const sst: SheetState = { drops: null, upTab: 'legs' };
+  const sst: SheetState = { drops: null, upTab: 'legs', extra: false, fullSalvage: false };
   let tick: ReturnType<typeof setInterval> | null = null;
   const toast = (msg: string) => { const t = document.createElement('div'); t.className = 'hg-toast'; t.textContent = msg; el.appendChild(t); setTimeout(() => t.remove(), 1800); };
   let chap: 1 | 2 | 3 | 'sv' = 1;
@@ -56,6 +58,8 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         ${s.deck.map((d, i) => { const w = assemble(d, PARTS).watt; return `<button class="slot ${i === sel ? 'on' : ''}" data-i="${i}" type="button" aria-label="설계도 ${i + 1}">${unitFit(d, 50, 54)}<i>${w}</i></button>`; }).join('')}
       </section>
       <nav class="hg-nav">
+        <button class="nv" id="nvMissions" type="button">임무${s.daily.missions.some(m => missionDone(m) && !m.claimed) ? '<i class="dot"></i>' : ''}</button>
+        <button class="nv" id="nvAttend" type="button">출석${canAttend(s, todayStr()) ? '<i class="dot"></i>' : ''}</button>
         <button class="nv" id="nvSupply" type="button">보급${s.tickets > 0 || freeChestReady(s, Date.now()) ? '<i class="dot"></i>' : ''}</button>
         <button class="nv" id="nvUpgrade" type="button">강화</button>
         <button class="nv" id="nvShop" type="button">상점</button>
@@ -66,7 +70,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         <button class="btn primary big ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button">출격</button>
       </footer>
       ${guideAssemble ? '<div class="hg-tip">첫 승리! 설계도를 바꿔 더 강해져 보세요.</div>' : ''}
-      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : ''}`;
+      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml() : sheet === 'attend' ? attendHtml() : ''}`;
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });
     (el.querySelector('#hgAssemble') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openAssembly(sel); };
@@ -88,10 +92,10 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       });
       render();
     });
-    for (const [id, k] of [['#nvSupply', 'supply'], ['#nvUpgrade', 'upgrade'], ['#nvShop', 'shop']] as const) {
+    for (const [id, k] of [['#nvMissions', 'missions'], ['#nvAttend', 'attend'], ['#nvSupply', 'supply'], ['#nvUpgrade', 'upgrade'], ['#nvShop', 'shop']] as const) {
       (el.querySelector(id) as HTMLButtonElement).onclick = () => { play('uiClick'); sst.drops = null; sheet = k; render(); };
     }
-    if (sheet === 'supply' || sheet === 'odds' || sheet === 'upgrade' || sheet === 'shop') bindSheets(el, sheet, sst, { rerender: render, toast, open: k => { sheet = k; render(); } });
+    if (sheet === 'supply' || sheet === 'odds' || sheet === 'upgrade' || sheet === 'shop' || sheet === 'missions' || sheet === 'attend') bindSheets(el, sheet, sst, { rerender: render, toast, open: k => { sheet = k; render(); } });
     el.querySelector('#sheetClose')?.addEventListener('click', () => { play('uiBack'); sheet = false; sst.drops = null; render(); });
     el.querySelector('.sheet-dim')?.addEventListener('click', () => { sheet = false; render(); });
     el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked):not(.gear-hero):not(.gear-skill)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
@@ -158,7 +162,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
 
   return {
     el,
-    show() { sheet = false; sst.drops = null; el.hidden = false; render(); if (tick) clearInterval(tick); tick = setInterval(() => { if (!el.hidden && sheet === 'supply' && !sst.drops) render(); }, 30000); },
+    show() { sheet = false; sst.drops = null; sst.extra = false; touchDaily(() => { /* 오늘 임무 뽑기 */ }); el.hidden = false; render(); if (tick) clearInterval(tick); tick = setInterval(() => { if (!el.hidden && sheet === 'supply' && !sst.drops) render(); }, 30000); },
     hide() { el.hidden = true; if (tick) { clearInterval(tick); tick = null; } },
   };
 }

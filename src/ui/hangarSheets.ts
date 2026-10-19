@@ -1,15 +1,17 @@
 import { PARTS } from '../data/parts';
 import { CATALOG, GROUP_LABEL, won, type ProductGroup } from '../data/catalog';
 import { store, update } from '../game/store';
-import { openChest, openFreeChest, freeChestReady, freeChestWaitMs, oddsTable, partsOf, rarityOf, upgradePart, SUPPLY, RARITY_LABEL, type Drop, type Rarity } from '../domain/supply';
+import { openChest, openFreeChest, extraDrop, freeChestReady, freeChestWaitMs, oddsTable, partsOf, rarityOf, upgradePart, SUPPLY, RARITY_LABEL, type Drop, type Rarity } from '../domain/supply';
+import { MISSION_REWARDS, defOf, missionDone, claimMission, refreshMission, claimAttend, attendReward, attendDay, canAttend, ATTEND_DAYS, salvageCopies, addProgress, todayStr, SALVAGE_RATIO } from '../domain/daily';
+import { adAvailable, adLabel, watchForSlot, touchDaily } from './adFlow';
 import { upgradeCost, levelMultiplier, MAX_LEVEL } from '../domain/upgrade';
 import { accIconUrl, spriteUrl } from '../game/unitLayout';
 import { esc, partName } from './unitView';
 import { play } from '../native/audio';
 
 /** 격납고 시트 4종: 보급(상자) · 강화 · 상점 · 확률표. 화면 이동 없이 격납고 위에 올라온다. */
-export type SheetKind = 'supply' | 'upgrade' | 'shop' | 'odds';
-export interface SheetState { drops: Drop[] | null; upTab: 'legs' | 'body' | 'weapon' | 'accessory' }
+export type SheetKind = 'supply' | 'upgrade' | 'shop' | 'odds' | 'missions' | 'attend';
+export interface SheetState { drops: Drop[] | null; upTab: 'legs' | 'body' | 'weapon' | 'accessory'; /** 이번 상자에 한 칸 더(광고)를 썼는가 */ extra: boolean; /** 다음 분해를 100% 로(광고 A7 시청 뒤) */ fullSalvage: boolean }
 export interface SheetCtx { rerender(): void; toast(msg: string): void; open(k: SheetKind | false): void }
 
 const partImg = (id: string, w = 40) => {
@@ -42,7 +44,8 @@ export function supplyHtml(st: SheetState, now: number): string {
         <div class="sp-actions">
           <button class="btn primary" id="spOpen" type="button" ${s.tickets > 0 ? '' : 'disabled'}>보급권으로 열기 (${s.tickets}장)</button>
           <button class="btn ${free ? 'pulse' : ''}" id="spFree" type="button" ${free ? '' : 'disabled'}>${free ? '무료 상자 열기' : `무료 상자 ${waitText(freeChestWaitMs(s, now))} 뒤`}</button>
-          <button class="btn" id="spAd" type="button" disabled>광고 보고 즉시 열기 (준비 중)</button>
+          ${!free && adAvailable('free_chest') ? `<button class="btn ad" id="spFreeAd" type="button">${adLabel('무료 상자 바로 열기', 'free_chest')}</button>` : ''}
+          ${st.drops && !st.extra && adAvailable('chest_extra') ? `<button class="btn ad" id="spExtra" type="button">${adLabel('한 칸 더 받기', 'chest_extra')}</button>` : ''}
           <button class="btn ghost" id="spOdds" type="button">확률표 보기</button>
         </div>
         <p class="sp-note">보급권은 작전 첫 승리(보스 2장)와 3승마다 받아요. 유료 상자는 없습니다 — 모든 상자는 같은 확률표를 씁니다.</p>
@@ -77,14 +80,15 @@ export function upgradeHtml(st: SheetState): string {
       ${partImg(p.id, 44)}
       <span class="tx"><b>${esc(p.name)} ${rarityTag(rarityOf(p.id))}</b><small>Lv.${lv}/${MAX_LEVEL} · 능력 +${Math.round((levelMultiplier(lv) - 1) * 100)}%${cost ? ` · 다음 +${Math.round((levelMultiplier(lv + 1) - levelMultiplier(lv)) * 100)}%` : ' · 최고'}</small>
         ${cost ? `<i class="bar"><u style="width:${Math.min(100, (have / cost.copies) * 100)}%"></u></i><small>조각 ${have}/${cost.copies} · 광석 ${cost.ore}</small>` : ''}</span>
-      <button class="btn ${can ? 'primary' : ''} up-btn" data-id="${p.id}" type="button" ${cost ? '' : 'disabled'}>${cost ? '강화' : 'MAX'}</button>
+      <span class="up-acts"><button class="btn ${can ? 'primary' : ''} up-btn" data-id="${p.id}" type="button" ${cost ? '' : 'disabled'}>${cost ? '강화' : 'MAX'}</button>${have > 0 ? `<button class="btn up-salv" data-id="${p.id}" type="button">분해</button>` : ''}</span>
     </div>`;
   }).join('');
   return `<div class="sheet-dim"></div>
     <div class="sheet" role="dialog" aria-label="강화">
       ${head('부품 강화')}
       <div class="ch-tabs">${UP_TABS.map(t => `<button class="ch-tab up-tab ${st.upTab === t.k ? 'on' : ''}" data-k="${t.k}" type="button">${t.label}</button>`).join('')}</div>
-      <p class="sp-note">광석 <b>${s.ore.toLocaleString('ko-KR')}</b> · 같은 부품 조각(보급 상자)과 광석으로 한 단계씩 올려요. Lv10 은 Lv1 보다 최대 +30% (체력·공격). 설계도 강화 단계 = 세 부품 레벨의 평균입니다.</p>
+      <p class="sp-note">광석 <b>${s.ore.toLocaleString('ko-KR')}</b> · 같은 부품 조각(보급 상자)과 광석으로 한 단계씩 올려요. Lv10 은 Lv1 보다 최대 +30% (체력·공격). 설계도 강화 단계 = 세 부품 레벨의 평균입니다. 남는 조각은 「분해」로 광석 ${Math.round(SALVAGE_RATIO * 100)}% 를 돌려받아요.</p>
+      ${st.fullSalvage ? '<p class="sp-note"><b>다음 분해는 100% 환급</b>이 적용돼요.</p>' : adAvailable('salvage_full') ? `<button class="btn ad up-full" id="upFull" type="button">${adLabel('분해 100% 환급', 'salvage_full')}</button>` : ''}
       <div class="stage-list">${list}</div>
     </div>`;
 }
@@ -103,18 +107,54 @@ export function shopHtml(): string {
     </div>`;
 }
 
+export function missionsHtml(): string {
+  const s = store.getState().save, d = s.daily;
+  const rows = d.missions.map((m, i) => {
+    const def = defOf(m.type), r = MISSION_REWARDS[i] ?? MISSION_REWARDS[0], done = missionDone(m);
+    const rew = `광석 ${r.ore} · 경험치 ${r.exp}${r.tickets ? ` · 보급권 ${r.tickets}` : ''}`;
+    const canRef = !m.claimed && !d.refreshed && adAvailable('mission_refresh');
+    return `<div class="ms-row ${m.claimed ? 'done' : ''}">
+      <span class="tx"><b>${def.label} (${m.target})</b><i class="bar"><u style="width:${(m.progress / m.target) * 100}%"></u></i><small>${m.progress}/${m.target} · ${rew}</small></span>
+      <span class="ms-acts"><button class="btn ${done && !m.claimed ? 'primary pulse' : ''} ms-claim" data-i="${i}" type="button" ${done && !m.claimed ? '' : 'disabled'}>${m.claimed ? '받음' : done ? '받기' : '진행 중'}</button>${canRef ? `<button class="btn ad ms-ref" data-i="${i}" type="button">${adLabel('임무 바꾸기', 'mission_refresh')}</button>` : ''}</span>
+    </div>`;
+  }).join('');
+  return `<div class="sheet-dim"></div>
+    <div class="sheet" role="dialog" aria-label="일일 임무">
+      ${head('일일 임무')}
+      <p class="sp-note">매일 자정(기기 시간)에 새로 바뀌어요. 완료한 임무는 직접 「받기」를 눌러야 지급됩니다. 하루에 임무 1개는 광고로 바꿀 수 있어요.</p>
+      <div class="stage-list">${rows || '<p class="sp-tip">임무를 불러오는 중…</p>'}</div>
+    </div>`;
+}
+
+export function attendHtml(): string {
+  const s = store.getState().save, today = todayStr(), can = canAttend(s, today), cur = attendDay(s);
+  const cells = Array.from({ length: ATTEND_DAYS }, (_, i) => {
+    const day = i + 1, r = attendReward(day), got = day < cur || (day === cur && !can && s.attend.lastDate === today), isToday = day === cur && can;
+    const big = !!r.copies || day === ATTEND_DAYS;
+    return `<div class="at-cell ${got ? 'got' : ''} ${isToday ? 'today' : ''} ${big ? 'big' : ''}"><i>${day}</i><b>${r.copies ? '조각' : r.tickets ? '🎁' : '⛏'}</b><small>${r.copies ? `×${r.copies.n}` : r.tickets ? `+${r.tickets}` : r.ore}</small>${got ? '<em>✓</em>' : ''}</div>`;
+  }).join('');
+  const r = attendReward(cur);
+  return `<div class="sheet-dim"></div>
+    <div class="sheet" role="dialog" aria-label="출석">
+      ${head('출석 28일')}
+      <p class="sp-note">하루에 한 번 받아요. 빠진 날이 있어도 벌칙 없이 다음 날짜부터 이어집니다. 28일을 채우면 처음부터 다시 시작해요. 오늘 보상: 광석 ${r.ore} · 경험치 ${r.exp}${r.tickets ? ` · 보급권 ${r.tickets}` : ''}${r.copies ? ` · ${esc(partName(r.copies.part))} 조각 ×${r.copies.n}` : ''}</p>
+      <div class="at-grid">${cells}</div>
+      <button class="btn ${can ? 'primary pulse' : ''}" id="atClaim" type="button" ${can ? '' : 'disabled'}>${can ? `${cur}일차 출석 받기` : '오늘은 받았어요'}</button>
+    </div>`;
+}
+
 /** 시트 안 버튼 연결 (격납고 render 끝에서 호출) */
 export function bindSheets(el: HTMLElement, kind: SheetKind, st: SheetState, ctx: SheetCtx): void {
   const on = (sel: string, f: (b: HTMLButtonElement) => void) => el.querySelectorAll<HTMLButtonElement>(sel).forEach(b => b.onclick = () => f(b));
   on('#spOpen', () => {
     const r = openChest(store.getState().save);
     if (!r) { play('deny'); ctx.toast('보급권이 없어요.'); return; }
-    update(sv => { Object.assign(sv, r.save); }); st.drops = r.drops; play('packBurst'); ctx.rerender();
+    update(sv => { Object.assign(sv, r.save); }); touchDaily(sv => addProgress(sv, 'chest')); st.drops = r.drops; st.extra = false; play('packBurst'); ctx.rerender();
   });
   on('#spFree', () => {
     const r = openFreeChest(store.getState().save, Date.now());
     if (!r) { play('deny'); return; }
-    update(sv => { Object.assign(sv, r.save); }); st.drops = r.drops; play('packBurst'); ctx.rerender();
+    update(sv => { Object.assign(sv, r.save); }); touchDaily(sv => addProgress(sv, 'chest')); st.drops = r.drops; st.extra = false; play('packBurst'); ctx.rerender();
   });
   on('#spOdds', () => { play('uiClick'); ctx.open('odds'); });
   on('#oddsBack', () => { play('uiBack'); ctx.open('supply'); });
@@ -122,8 +162,46 @@ export function bindSheets(el: HTMLElement, kind: SheetKind, st: SheetState, ctx
   on('.up-btn', b => {
     const r = upgradePart(store.getState().save, b.dataset.id!);
     if (!r.ok) { play('deny'); ctx.toast(r.reason); return; }
-    update(sv => { Object.assign(sv, r.save); }); play('ready'); ctx.toast(`${partName(b.dataset.id!)} Lv.${r.save.partLevels[b.dataset.id!]} 강화!`); ctx.rerender();
+    update(sv => { Object.assign(sv, r.save); }); touchDaily(sv => addProgress(sv, 'upgrade')); play('ready'); ctx.toast(`${partName(b.dataset.id!)} Lv.${r.save.partLevels[b.dataset.id!]} 강화!`); ctx.rerender();
   });
   on('.shop-buy', () => { play('deny'); ctx.toast('테스트 빌드에서는 결제가 열리지 않아요.'); });
+  // ── 보상형 광고 자리 (A3·A4·A6·A7)
+  on('#spFreeAd', async () => {
+    const r = await watchForSlot('free_chest', sv => { sv.supply.freeAt = 0; });
+    if (!r.ok) { play('deny'); ctx.toast(r.msg); return; }
+    const o = openFreeChest(store.getState().save, Date.now()); if (!o) return;
+    update(sv => { Object.assign(sv, o.save); }); touchDaily(sv => addProgress(sv, 'chest')); st.drops = o.drops; st.extra = false; play('packBurst'); ctx.rerender();
+  });
+  on('#spExtra', async () => {
+    let drop: Drop | null = null;
+    const r = await watchForSlot('chest_extra', sv => { const e = extraDrop(sv); Object.assign(sv, e.save); drop = e.drop; });
+    if (!r.ok || !drop) { play('deny'); ctx.toast(r.msg); return; }
+    st.drops = [...(st.drops ?? []), drop]; st.extra = true; play('packBurst'); ctx.rerender();
+  });
+  on('#upFull', async () => {
+    const r = await watchForSlot('salvage_full', () => { /* 지급은 분해할 때 */ });
+    if (!r.ok) { play('deny'); ctx.toast(r.msg); return; }
+    st.fullSalvage = true; play('ready'); ctx.toast('다음 분해는 광석 100% 로 돌려받아요.'); ctx.rerender();
+  });
+  on('.up-salv', b => {
+    const id = b.dataset.id!, r = salvageCopies(store.getState().save, id, st.fullSalvage);
+    if (!r) { play('deny'); return; }
+    update(sv => { Object.assign(sv, r.save); }); st.fullSalvage = false; play('ready'); ctx.toast(`${partName(id)} 조각을 분해해 광석 +${r.ore}`); ctx.rerender();
+  });
+  // ── 일일 임무 · 출석
+  on('.ms-claim', b => {
+    const r = claimMission(store.getState().save, Number(b.dataset.i)); if (!r) { play('deny'); return; }
+    update(sv => { Object.assign(sv, r.save); }); play('ready'); ctx.toast(`임무 보상: 광석 +${r.reward.ore}${r.reward.tickets ? ` · 보급권 +${r.reward.tickets}` : ''}`); ctx.rerender();
+  });
+  on('.ms-ref', async b => {
+    const i = Number(b.dataset.i);
+    const r = await watchForSlot('mission_refresh', sv => { const n = refreshMission(sv, i); if (n) Object.assign(sv, n); });
+    if (!r.ok) { play('deny'); ctx.toast(r.msg); return; }
+    play('uiClick'); ctx.toast('임무를 바꿨어요.'); ctx.rerender();
+  });
+  on('#atClaim', () => {
+    const r = claimAttend(store.getState().save, todayStr()); if (!r) { play('deny'); return; }
+    update(sv => { Object.assign(sv, r.save); }); play('packBurst'); ctx.toast(`${r.day}일차 출석! 광석 +${r.reward.ore}${r.reward.tickets ? ` · 보급권 +${r.reward.tickets}` : ''}${r.reward.copies ? ' · 부품 조각' : ''}`); ctx.rerender();
+  });
   void kind;
 }
