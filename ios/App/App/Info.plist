@@ -66,9 +66,9 @@
 	<false/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<!-- AdMob 앱 ID: 지금은 구글 공식 테스트 앱 ID. 출시 빌드에서 AdMob 「조립전쟁(iOS)」 앱 ID 로 교체 (src/config/ads.ts 도 함께) -->
+	<!-- AdMob 앱 ID: 「조립전쟁 (iOS)」 (2026-10-19 생성, 숏앱스튜디오 AdMob 계정). 광고는 src/config/ads.ts 의 ADMOB_TEST_MODE=true 인 동안 테스트 광고만 나온다 -->
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-8637735577267068~3160645609</string>
 	<!-- iOS 14.5+ ATT 팝업 문구 -->
 	<key>NSUserTrackingUsageDescription</key>
 	<string>보상형 광고(광고 보고 보상 받기)에 맞는 광고를 보여 주기 위해 사용됩니다. 거절해도 게임은 똑같이 즐길 수 있어요. / Used to show ads that suit you in watch-an-ad rewards. You can decline and still play normally.</string>
