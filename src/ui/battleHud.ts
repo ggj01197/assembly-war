@@ -5,6 +5,7 @@ import { unitFit, esc, partName } from './unitView';
 import { play } from '../native/audio';
 import { skillById, KIND_LABEL, SKILL_COOLDOWN_SEC, HERO_SKILL_COOLDOWN_SEC, HERO_WATT } from '../domain/loadout';
 import { TICK_HZ } from '../domain/battle/sim';
+import { stageLabel } from '../data/stages';
 
 /** 전투 화면의 HTML 부분: 위(남은 시간·적 기지·힌트) / 아래(내 기지·와트·카드 6장 + 스킬 칸 2개). 전장은 Phaser. */
 export interface HudHandlers { onSelect(i: number): void; onSkill(slot: number): void; onHero(): void; onHeroSkill(): void; onQuit(): void }
@@ -21,6 +22,7 @@ export class BattleHud {
   private hintT: ReturnType<typeof setTimeout> | null = null;
   private costs: number[] = [];
   private skillBtns: HTMLButtonElement[] = [];
+  private subEl: HTMLElement | null = null;
   private heroBtn: HTMLButtonElement | null = null; private heroSkillBtn: HTMLButtonElement | null = null; private heroTx: HTMLElement | null = null;
 
   constructor(root: HTMLElement) {
@@ -35,7 +37,7 @@ export class BattleHud {
     this.el.innerHTML = `
       <header class="bt-top">
         <button class="quit" type="button" aria-label="나가기">나가기</button>
-        <div class="bt-mid"><b id="btTime">3:00</b><small>작전 ${stage.no} · ${esc(stage.name)}</small></div>
+        <div class="bt-mid"><b id="btTime">3:00</b><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}</small></div>
         <div class="bt-point" id="btPoint" title="중앙 거점">거점</div>
       </header>
       <div class="bt-bars top"><span>적 기지</span><i class="hpbar"><u id="btEnemy"></u></i><em id="btEnemyN">${BASE_HP}</em></div>
@@ -60,6 +62,7 @@ export class BattleHud {
     this.wattFill = q('#btWatt'); this.wattNum = q('#btWattN'); this.hintEl = q('#btHint'); this.toastEl = q('#btToast'); this.pointEl = q('#btPoint');
     this.cards = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.card[data-i]'));
     this.cards.forEach(c => c.onclick = () => { play('uiClick'); h.onSelect(Number(c.dataset.i)); });
+    this.subEl = this.el.querySelector('#btSub');
     this.skillBtns = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.card.skill[data-skill]'));
     this.skillBtns.forEach(c => c.onclick = () => { h.onSkill(Number(c.dataset.skill)); });
     this.heroBtn = this.el.querySelector('#btHeroBtn'); this.heroSkillBtn = this.el.querySelector('#btHeroSkill'); this.heroTx = this.el.querySelector('#btHeroTx');
@@ -87,6 +90,7 @@ export class BattleHud {
     const rem = Math.ceil(b.remaining);
     this.timerEl.textContent = `${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
     this.timerEl.classList.toggle('ot', b.overtime);
+    if (b.survival && this.subEl) this.subEl.textContent = `5분 버티기 · 웨이브 ${b.wave + 1}`;
     this.enemyBar.style.width = `${Math.max(0, (b.baseHp[1] / BASE_HP) * 100)}%`;
     this.myBar.style.width = `${Math.max(0, (b.baseHp[0] / BASE_HP) * 100)}%`;
     this.enemyNum.textContent = String(Math.max(0, Math.ceil(b.baseHp[1])));

@@ -2,6 +2,7 @@ import type { Part } from '../../data/parts';
 import { assemble, type Build, type UnitStats } from '../assemble';
 import { scaleStats } from '../upgrade';
 import { mulberry32, type Rng } from '../rng';
+import { bossById, type BossDef } from '../../data/bosses';
 import { skillById, heroById, SKILL_COOLDOWN_SEC, HERO_WATT, HERO_RESPAWN_SEC, HERO_SKILL_COOLDOWN_SEC, HERO_MOVE_SEC, HERO_MOVE_COOLDOWN_SEC, type HeroDef } from '../loadout';
 
 /**
@@ -88,7 +89,14 @@ export interface BattleOptions {
   skills?: [string[], string[]];
   heroes?: [string | null, string | null];
   heroLevel?: [number, number];
+  /** 적(팀 1)에게 나올 보스 id (5-D) */
+  boss?: string | null;
+  /** 5분 버티기: 300초, 적 기지는 무적, 15초마다 적이 강해진다. 5분 동안 내 기지가 버티면 승리 */
+  survival?: boolean;
 }
+
+export const SURVIVAL_SECONDS = 300;
+export const WAVE_SECONDS = 15;
 
 export interface HeroState { def: HeroDef; unit: number | null; respawn: number; skillCd: number; mult: number }
 /** 스킬 효과가 남은 틱 수 (팀별) */
@@ -123,7 +131,10 @@ export class Battle {
   private plan: [number | null, number | null] = [null, null];
   private bots: [boolean, boolean];
   private wattMult: [number, number];
+  private matchSec = MATCH_SECONDS;
   private maxTicks = (MATCH_SECONDS + OVERTIME_SECONDS) * TICK_HZ;
+  readonly survival: boolean;
+  private boss: { def: BossDef; spawned: boolean; unit: number | null; nextTick: number } | null = null;
 
   constructor(deckA: Deck, deckB: Deck, parts: Part[], seed: number, opts: BattleOptions = {}) {
     this.rng = mulberry32(seed);
@@ -132,6 +143,10 @@ export class Battle {
     this.damageByCard = [this.decks[0].map(() => 0), this.decks[1].map(() => 0)];
     this.bots = opts.bots ?? [true, true];
     this.wattMult = opts.wattMult ?? [1, 1];
+    this.survival = !!opts.survival;
+    if (this.survival) { this.matchSec = SURVIVAL_SECONDS; this.maxTicks = SURVIVAL_SECONDS * TICK_HZ; }
+    const bd = opts.boss ? bossById(opts.boss) : undefined;
+    if (bd) this.boss = { def: bd, spawned: false, unit: null, nextTick: 0 };
     for (const t of [0, 1] as Team[]) {
       this.skillIds[t] = (opts.skills?.[t] ?? []).filter(id => !!skillById(id)).slice(0, 2);
       this.skillCd[t] = this.skillIds[t].map(() => 0);
@@ -146,7 +161,13 @@ export class Battle {
 
   get seconds(): number { return this.tick / TICK_HZ; }
   /** 남은 시간(초). 연장 중에는 연장 남은 시간 */
-  get remaining(): number { return Math.max(0, (this.overtime ? MATCH_SECONDS + OVERTIME_SECONDS : MATCH_SECONDS) - this.seconds); }
+  get remaining(): number { return Math.max(0, (this.overtime ? this.matchSec + OVERTIME_SECONDS : this.matchSec) - this.seconds); }
+  /** 5분 버티기의 현재 웨이브(0부터) */
+  get wave(): number { return this.survival ? Math.floor(this.seconds / WAVE_SECONDS) : 0; }
+  /** 지금 보스 유닛(나온 뒤 살아 있을 때) */
+  bossUnit(): Unit | null { const b = this.boss; return b && b.unit !== null ? this.units.find(u => u.id === b.unit) ?? null : null; }
+  get bossDef(): BossDef | null { return this.boss?.def ?? null; }
+  get bossSpawned(): boolean { return !!this.boss?.spawned; }
 
   /** 플레이어(또는 외부)가 카드를 생산한다. 와트·동시 유닛 상한을 지키며 성공 여부를 돌려준다. */
   spawn(team: Team, cardIdx: number, lane: number): boolean {
@@ -156,7 +177,9 @@ export class Battle {
     if (card.watt > this.watt[team] + 1e-9) return false;
     if (this.count(team) >= MAX_UNITS_PER_TEAM) return false;
     this.watt[team] -= card.watt;
-    const u: Unit = { id: this.nextId++, team, lane, pos: team === 0 ? 0 : LANE_LEN, prev: team === 0 ? 0 : LANE_LEN, moving: false, hero: null, ghost: 0, toLane: lane, moveCd: 0, hp: card.stats.hp, maxHp: card.stats.hp, stats: card.stats, cd: 0, card: cardIdx };
+    const u: Unit = { id: this.nextId++, team, lane, pos: team === 0 ? 0 : LANE_LEN, prev: team === 0 ? 0 : LANE_LEN, moving: false, hero: null, ghost: 0, toLane: lane, moveCd: 0, hp: 0, maxHp: 0, stats: card.stats, cd: 0, card: cardIdx };
+    if (this.survival && team === 1) { const w = this.wave; u.stats = { ...card.stats, hp: Math.round(card.stats.hp * (1 + 0.07 * w)), dmg: Math.round(card.stats.dmg * (1 + 0.05 * w) * 100) / 100 }; }
+    u.hp = u.maxHp = u.stats.hp;
     this.units.push(u);
     this.spawned[team]++; this.spawnsByCard[team][cardIdx]++;
     this.pre.push({ type: 'spawn', unit: u.id, team, lane });
@@ -168,8 +191,8 @@ export class Battle {
     this.events = this.pre; this.pre = [];
     if (this.over) return false;
     const sec = this.tick / TICK_HZ;
-    if (!this.overtime && sec >= MATCH_SECONDS) {
-      if (this.baseHp[0] !== this.baseHp[1]) { this.over = true; return false; }
+    if (!this.overtime && sec >= this.matchSec) {
+      if (this.survival || this.baseHp[0] !== this.baseHp[1]) { this.over = true; return false; }
       this.overtime = true; // 동률이면 연장
     }
     if (this.tick >= this.maxTicks) { this.over = true; return false; }
@@ -186,10 +209,10 @@ export class Battle {
     for (const u of this.units) if (u.moveCd > 0) u.moveCd--;
 
     // 1. 와트 충전
-    const mult = this.overtime ? OVERTIME_MULT : sec >= MATCH_SECONDS - 60 ? FINAL_MINUTE_MULT : 1;
+    const mult = this.overtime ? OVERTIME_MULT : !this.survival && sec >= this.matchSec - 60 ? FINAL_MINUTE_MULT : 1;
     for (const t of [0, 1] as Team[]) {
       const bonus = (this.controller === t ? POINT_BONUS : 1) * (this.eff.charge[t] > 0 ? 2 : 1);
-      watt[t] = Math.min(WATT_POOL, watt[t] + (WATT_PER_SEC * mult * bonus * this.wattMult[t]) / TICK_HZ);
+      watt[t] = Math.min(WATT_POOL, watt[t] + (WATT_PER_SEC * mult * bonus * this.wattMult[t] * (this.survival && t === 1 ? 1 + 0.04 * this.wave : 1)) / TICK_HZ);
     }
 
     // 2. 생산 판단 (봇)
@@ -222,6 +245,9 @@ export class Battle {
         if (this.spawn(t, planned, score.indexOf(Math.max(...score)))) this.plan[t] = null;
       }
     }
+
+    // 2-b. 보스: 때가 되면 나오고, 주기 기술을 쓴다
+    this.stepBoss(sec);
 
     // 3. 공격 (피해는 모아 두었다가 동시에 적용). 치료(repair)는 같은 편 부상자에게 음수 피해로 들어간다.
     const unitDamage = new Map<number, number>();
@@ -295,9 +321,10 @@ export class Battle {
       if (d) u.hp = Math.min(u.maxHp, u.hp - d);
     }
     for (const t of [0, 1] as Team[]) if (this.eff.shield[t] > 0) baseDmg[t] *= 0.5;
+    if (this.survival) baseDmg[1] = 0;
     baseHp[0] -= baseDmg[0]; baseHp[1] -= baseDmg[1];
     for (const u of units) if (u.hp <= 0) {
-      if (u.hero) { const h = this.hero[u.team]; if (h) { h.unit = null; h.respawn = HERO_RESPAWN_SEC * TICK_HZ; } }
+      if (u.hero) { const h = this.hero[u.team]; if (h && h.unit === u.id) { h.unit = null; h.respawn = HERO_RESPAWN_SEC * TICK_HZ; } }
       this.kills[u.team === 0 ? 1 : 0]++; this.events.push({ type: 'die', unit: u.id, team: u.team, lane: u.lane, pos: u.pos }); }
     for (let i = units.length - 1; i >= 0; i--) if (units[i].hp <= 0) units.splice(i, 1);
 
@@ -337,6 +364,32 @@ export class Battle {
     return !this.over;
   }
 
+  private stepBoss(sec: number) {
+    const bs = this.boss; if (!bs) return;
+    const d = bs.def;
+    if (!bs.spawned && sec >= d.spawnAt) {
+      bs.spawned = true;
+      const st = { ...d.stats };
+      const u: Unit = { id: this.nextId++, team: 1, lane: 1, pos: LANE_LEN, prev: LANE_LEN, moving: false, hero: d.id, ghost: 0, toLane: 1, moveCd: 0, hp: st.hp, maxHp: st.hp, stats: st, cd: 0, card: -1 };
+      this.units.push(u); bs.unit = u.id; bs.nextTick = this.tick + d.ability.every * TICK_HZ;
+      this.pre.push({ type: 'spawn', unit: u.id, team: 1, lane: 1 });
+      this.pre.push({ type: 'skill', team: 1, skill: 'boss_arrive', lane: 1, unit: u.id });
+      return;
+    }
+    const u = this.bossUnit();
+    if (!u || u.hp <= 0 || this.tick < bs.nextTick) return;
+    bs.nextTick = this.tick + d.ability.every * TICK_HZ;
+    const mine = this.units.filter(x => x.team === 0 && x.ghost === 0 && x.hp > 0);
+    if (d.ability.kind === 'airstrike') {
+      for (const x of mine) { if (x.stats.move === 'air') x.hp -= 60; else if (x.lane === u.lane) x.hp -= 25; }
+    } else if (d.ability.kind === 'mortar') {
+      const pool = [...mine]; for (let i = 0; i < 3 && pool.length; i++) { const k = Math.floor(this.rng() * pool.length); pool[k].hp -= 90; pool.splice(k, 1); }
+    } else {
+      for (const x of this.units) if (x.team === 1 && x.hp > 0) x.hp = Math.min(x.maxHp, x.hp + x.maxHp * 0.2);
+    }
+    this.pre.push({ type: 'skill', team: 1, skill: 'boss_' + d.ability.kind, lane: u.lane, unit: u.id });
+  }
+
   // ───────── 스킬·영웅 (플레이어 명령 — 봇도 같은 함수를 쓴다) ─────────
   /** 스킬 칸 slot(0~1)을 쓴다. 길이 필요한 스킬은 lane 을 준다. 성공 여부를 돌려준다. */
   castSkill(team: Team, slot: number, lane = -1): boolean {
@@ -354,7 +407,7 @@ export class Battle {
       case 'sk_repair': for (const a of this.units) if (a.team === team && a.hp > 0) a.hp = Math.min(a.maxHp, a.hp + a.maxHp * 0.25); break;
       case 'sk_slow': this.eff.slow[opp] = dur; break;
       case 'sk_armor': this.eff.armorDown[opp] = dur; break;
-      case 'sk_strike': this.baseHp[opp] -= this.eff.shield[opp] > 0 ? 30 : 60; if (this.baseHp[opp] <= 0) this.over = true; break;
+      case 'sk_strike': if (!this.survival) { this.baseHp[opp] -= this.eff.shield[opp] > 0 ? 30 : 60; if (this.baseHp[opp] <= 0) this.over = true; } break;
       case 'sk_charge': this.eff.charge[team] = dur; break;
     }
     this.pre.push({ type: 'skill', team, skill: def.id, lane, unit: null });
@@ -440,7 +493,7 @@ export class Battle {
   }
 
   result(): BattleResult {
-    const winner: Team | -1 = this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
+    const winner: Team | -1 = this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
     return {
       winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime,
       spawned: [...this.spawned], kills: [...this.kills], spawnsByCard: [[...this.spawnsByCard[0]], [...this.spawnsByCard[1]]], damageByCard: [[...this.damageByCard[0]], [...this.damageByCard[1]]],

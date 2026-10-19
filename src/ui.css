@@ -101,6 +101,8 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .stage .tx { display: grid; gap: 2px; } .stage .tx b { font: 700 15px var(--body); } .stage .tx small { font: 400 12px var(--body); color: var(--steel); line-height: 1.35; }
 .stage .rw { font: 400 12px var(--body); color: var(--bronze); text-align: right; } .stage .rw em { color: var(--mint); font-style: normal; }
 .stage.locked { opacity: .45; }
+.ch-tabs { display: flex; gap: 6px; margin: 0 0 8px; overflow-x: auto; } .ch-tab { flex: 1 0 auto; min-height: 40px; padding: 0 12px; border-radius: 12px; background: #172740; border: 1px solid var(--line); font: 700 13px var(--body); color: var(--steel); white-space: nowrap; }
+.ch-tab.on { border-color: var(--mint); color: var(--text); background: #1b3550; } .ch-tab:disabled { opacity: .45; }
 .gear-h { margin: 6px 2px 0; font: 700 12px var(--body); color: var(--cyan); letter-spacing: .04em; }
 .stage.picked { border-color: var(--mint); background: #1b3550; }
 .stage .tx em { font: 700 10px var(--body); color: var(--bronze); font-style: normal; margin-left: 4px; }

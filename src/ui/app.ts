@@ -2,7 +2,7 @@ import type Phaser from 'phaser';
 import { PARTS } from '../data/parts';
 import { stageById } from '../data/stages';
 import { Battle, type Deck } from '../domain/battle/sim';
-import { settle } from '../domain/rewards';
+import { settle, settleSurvival } from '../domain/rewards';
 import { store, boot, update, flushSave } from '../game/store';
 import { loadSprites } from '../game/unitLayout';
 import { setSoundEnabled, playMusic } from '../native/audio';
@@ -54,6 +54,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
       bots: [false, true], wattMult: [1, stage.enemyWattMult],
       skills: [s.loadout.skills, stage.enemySkills ?? []], heroes: [s.loadout.hero, stage.enemyHero ?? null],
       heroLevel: [commanderLevel(s.commanderExp).level, stage.enemyLevel],
+      boss: stage.boss ?? null, survival: !!stage.survival,
     });
     if (current) screens[current].hide();
     current = null;
@@ -64,11 +65,13 @@ export async function startApp(game: Phaser.Game): Promise<void> {
       onEnd: (b: Battle) => {
         const res = b.result();
         const win = res.winner === 0;
-        const settled = settle(store.getState().save, stage, win, res.baseHp[0]);
+        const cur = store.getState().save;
+        const sv2 = stage.survival ? settleSurvival(cur, stage, res.seconds, win) : null;
+        const settled = sv2 ?? settle(cur, stage, win, res.baseHp[0]);
         update(sv => { Object.assign(sv, settled.save); });
         void flushSave();
         hud.hide();
-        const data: ResultData = { stage, battle: b, builds: s.deck, rewards: settled.rewards, win, quit: false };
+        const data: ResultData = { stage, battle: b, builds: s.deck, rewards: settled.rewards, win, quit: false, record: sv2?.record ?? false };
         current = 'result'; playMusic('hangar'); screens.result.show(data);
         finish();
       },

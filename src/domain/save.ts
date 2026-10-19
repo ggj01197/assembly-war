@@ -23,6 +23,8 @@ export interface SaveData {
   settings: { sound: boolean; reducedMotion: boolean };
   /** 출격 장비: 스킬 2칸 + 영웅 1명 (5-C) */
   loadout: Loadout;
+  /** 5분 버티기 최고 기록(초) */
+  survivalBest: number;
 }
 
 export const STARTER_DECK: Build[] = [
@@ -43,7 +45,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     partLevels, stages: {},
     flags: { assembled: false, firstWin: false },
     settings: { sound: true, reducedMotion: false },
-    loadout: defaultLoadout(),
+    loadout: defaultLoadout(), survivalBest: 0,
   };
 }
 
@@ -90,6 +92,7 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
     out.settings = { sound: (r.settings as { sound?: unknown }).sound !== false, reducedMotion: !!(r.settings as { reducedMotion?: unknown }).reducedMotion };
   }
   out.loadout = repairLoadout((r as { loadout?: unknown }).loadout, commanderLevel(out.commanderExp).level);
+  out.survivalBest = Math.floor(num((r as { survivalBest?: unknown }).survivalBest, 0, 0, 300));
   out.version = SAVE_VERSION;
   return out;
 }

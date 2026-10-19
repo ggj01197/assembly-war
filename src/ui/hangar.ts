@@ -1,6 +1,6 @@
 import { assemble, type Build } from '../domain/assemble';
 import { PARTS } from '../data/parts';
-import { STAGES, isUnlocked } from '../data/stages';
+import { CHAPTERS, STAGES, SURVIVAL, isUnlocked } from '../data/stages';
 import { store, update } from '../game/store';
 import { SKILLS, HEROES, KIND_LABEL, heroById } from '../domain/loadout';
 import { commanderLevel } from '../domain/save';
@@ -15,6 +15,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
   el.className = 'screen hangar'; el.hidden = true;
   root.appendChild(el);
   let sel = 0, sheet: false | 'stage' | 'gear' = false;
+  let chap: 1 | 2 | 3 | 'sv' = 1;
 
   const slotTitle = (b: Build) => partName(b.weapon);
 
@@ -59,7 +60,13 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });
     (el.querySelector('#hgAssemble') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openAssembly(sel); };
-    (el.querySelector('#hgSortie') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'stage'; render(); };
+    (el.querySelector('#hgSortie') as HTMLButtonElement).onclick = () => {
+      play('uiClick'); sheet = 'stage';
+      // 아직 못 깬 첫 작전이 있는 장을 열어 준다
+      const cur = STAGES.find(st => (store.getState().save.stages[st.id]?.clears ?? 0) === 0 && isUnlocked(st, store.getState().save.stages));
+      chap = cur ? cur.chapter : 3; render();
+    };
+    el.querySelectorAll<HTMLButtonElement>('.ch-tab:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); chap = b2.dataset.ch === 'sv' ? 'sv' : (Number(b2.dataset.ch) as 1 | 2 | 3); render(); });
     (el.querySelector('#hgGear') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'gear'; render(); };
     el.querySelectorAll<HTMLButtonElement>('.gear-hero:not(.locked)').forEach(b2 => b2.onclick = () => { play('uiClick'); update(sv => { sv.loadout.hero = b2.dataset.id!; }); render(); });
     el.querySelectorAll<HTMLButtonElement>('.gear-skill:not(.locked)').forEach(b2 => b2.onclick = () => {
@@ -104,22 +111,34 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </div>`;
   }
 
+  /** 작전 선택: 장 탭(1·2·3장·5분 버티기) + 전투 목록 */
   function stageSheet(): string {
     const s = store.getState().save;
+    const ch = CHAPTERS.find(c => c.no === chap);
+    const tabs = `<div class="ch-tabs">${CHAPTERS.map(c => {
+      const open = isUnlocked(c.stages[0], s.stages);
+      return `<button class="ch-tab ${chap === c.no ? 'on' : ''}" data-ch="${c.no}" type="button" ${open ? '' : 'disabled'}>${c.no}장${open ? '' : ' 🔒'}</button>`;
+    }).join('')}<button class="ch-tab ${chap === 'sv' ? 'on' : ''}" data-ch="sv" type="button" ${isUnlocked(SURVIVAL, s.stages) ? '' : 'disabled'}>5분 버티기${isUnlocked(SURVIVAL, s.stages) ? '' : ' 🔒'}</button></div>`;
+    const list = chap === 'sv'
+      ? `<button class="stage" data-id="${SURVIVAL.id}" type="button">
+          <i class="no">∞</i>
+          <span class="tx"><b>${esc(SURVIVAL.name)}</b><small>${esc(SURVIVAL.hint)}</small></span>
+          <span class="rw">${s.survivalBest ? `<em>최고 ${s.survivalBest}초</em>` : '기록 없음'}</span>
+        </button>`
+      : (ch?.stages ?? []).map(st => {
+          const open = isUnlocked(st, s.stages);
+          const rec = s.stages[st.id];
+          return `<button class="stage ${open ? '' : 'locked'}" data-id="${st.id}" type="button" ${open ? '' : 'disabled'}>
+            <i class="no">${st.no}</i>
+            <span class="tx"><b>${esc(st.name)}${st.boss ? ' <em>보스</em>' : ''}</b><small>${open ? esc(st.hint) : '앞 작전을 먼저 끝내세요'}</small></span>
+            <span class="rw">${rec?.clears ? '<em>✓ 완료</em>' : `광석 ${st.rewardOre}`}</span>
+          </button>`;
+        }).join('');
     return `<div class="sheet-dim"></div>
       <div class="sheet" role="dialog" aria-label="작전 선택">
-        <div class="sheet-head"><b>1장 · 훈련소</b><button id="sheetClose" type="button" aria-label="닫기">✕</button></div>
-        <div class="stage-list">
-          ${STAGES.map(st => {
-            const open = isUnlocked(st, s.stages);
-            const rec = s.stages[st.id];
-            return `<button class="stage ${open ? '' : 'locked'}" data-id="${st.id}" type="button" ${open ? '' : 'disabled'}>
-              <i class="no">${st.no}</i>
-              <span class="tx"><b>${esc(st.name)}</b><small>${open ? esc(st.hint) : '앞 작전을 먼저 끝내세요'}</small></span>
-              <span class="rw">${rec?.clears ? '<em>✓ 완료</em>' : `광석 ${st.rewardOre}`}</span>
-            </button>`;
-          }).join('')}
-        </div>
+        <div class="sheet-head"><b>${chap === 'sv' ? '5분 버티기' : `${chap}장 · ${esc(ch?.name ?? '')}`}</b><button id="sheetClose" type="button" aria-label="닫기">✕</button></div>
+        ${tabs}
+        <div class="stage-list">${list}</div>
       </div>`;
   }
 

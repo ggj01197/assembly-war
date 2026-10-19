@@ -5,6 +5,7 @@ import { PARTS } from '../../data/parts';
 import { play } from '../../native/audio';
 import type { BattleHud } from '../../ui/battleHud';
 import { skillById, heroById, HERO_WATT, HERO_MOVE_SEC } from '../../domain/loadout';
+import { bossById } from '../../data/bosses';
 import type { Stage } from '../../data/stages';
 
 /**
@@ -77,13 +78,14 @@ export class BattleScene extends Phaser.Scene {
   private wattFull = false;
   private dead = false;
   private hoverLane = -1;
+  private bossText: Phaser.GameObjects.Text | null = null;
   private motes: { x: number; y: number; v: number; s: number }[] = [];
 
   constructor() { super('battle'); }
 
   init(cfg: BattleConfig) {
     this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
-    this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hoverLane = -1;
+    this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hoverLane = -1; this.bossText = null;
   }
 
   preload() {
@@ -298,7 +300,9 @@ export class BattleScene extends Phaser.Scene {
         this.fx.push({ kind: 'debris', x1: x, y1: y, x2: x, y2: y, t: 0, dur: 0.7, color: 0xb9c3d1, r: 46 * s });
         this.fx.push({ kind: 'ring', x1: x, y1: y + 10 * s, x2: x, y2: y + 10 * s, t: 0, dur: 0.4, color: 0xffd7a0, r: 40 * s });
         play('boom', 110);
-        if (!calm) this.cameras.main.shake(50, 0.0015);
+        const big = this.views.get(e.unit);
+        if (big && big.k >= 1.5) { for (let i = 0; i < 4; i++) this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: x + (i - 1.5) * 22 * s, y2: y - (i % 2) * 18 * s, t: -i * 0.12, dur: 0.5, color: 0xffa94d, r: 44 * s }); if (!calm) this.cameras.main.shake(320, 0.01); }
+        else if (!calm) this.cameras.main.shake(50, 0.0015);
       } else if (e.type === 'skill') {
         this.skillFx(e);
       } else if (e.type === 'point') {
@@ -331,6 +335,16 @@ export class BattleScene extends Phaser.Scene {
         this.baseFlash[opp] = 1; play('mortar'); if (!calm) this.cameras.main.shake(180, 0.007); break;
       }
       case 'sk_charge': this.fx.push({ kind: 'ring', x1: this.W / 2, y1: this.baseY(e.team), x2: this.W / 2, y2: this.baseY(e.team), t: 0, dur: 0.6, color: 0xffd067, r: this.W * 0.3 }); play('pointCapture'); break;
+      case 'boss_arrive': {
+        const d = b.bossDef; if (!d) break;
+        this.cfg.hud.toast(`경고! ${d.name} 출현`); play('baseHit');
+        if (!calm) this.cameras.main.shake(300, 0.008);
+        this.fx.push({ kind: 'ring', x1: this.W / 2, y1: this.y0 + 20, x2: this.W / 2, y2: this.y0 + 20, t: 0, dur: 0.7, color: 0xff4d4d, r: this.W * 0.45 });
+        break;
+      }
+      case 'boss_airstrike': pulse(0, 0xff6b6b, 36); play('flak'); if (!calm) this.cameras.main.shake(200, 0.006); break;
+      case 'boss_mortar': pulse(0, 0xff9f43, 30); play('mortar'); if (!calm) this.cameras.main.shake(220, 0.007); break;
+      case 'boss_repair': pulse(1, 0x6fe39a, 38); play('repair'); break;
       case 'hero_vanguard': {
         const v = e.unit !== null ? this.views.get(e.unit) : undefined; if (!v) break;
         this.fx.push({ kind: 'ring', x1: v.c.x, y1: v.c.y, x2: v.c.x, y2: v.c.y, t: 0, dur: 0.45, color: 0xffe08a, r: 46 * v.c.scaleX });
@@ -444,13 +458,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private makeView(u: Unit): View {
-    const hd = u.hero ? heroById(u.hero) : undefined;
+    const hd = u.hero ? (heroById(u.hero) ?? bossById(u.hero)) : undefined;   // 영웅 또는 보스(겉모습·크기를 같은 방식으로)
     const build = hd ? hd.build : this.cfg.battle.decks[u.team][u.card].build;
     const face: 1 | -1 = u.team === 0 ? 1 : -1;
     const L = layoutUnit(build, this.k, face === 1)!;
     const air = u.stats.move === 'air';
     const lift = air ? 20 * (this.k / 0.6) : 0;
-    const ringColor = hd ? 0xffd067 : u.team === 0 ? 0x5fd3ff : 0xff7a45;
+    const ringColor = hd && u.team === 0 ? 0xffd067 : u.team === 0 ? 0x5fd3ff : 0xff7a45;
     const shadow = this.add.ellipse(0, -1, L.w * 0.9, Math.max(8, L.w * 0.24), 0x000000, 0.35);
     const ring = this.add.ellipse(0, -1, L.w * 0.72, Math.max(6, L.w * 0.18), ringColor, 0.12).setStrokeStyle(1.5, ringColor, 0.85);
     const imgs: Phaser.GameObjects.Image[] = [];
@@ -557,9 +571,19 @@ export class BattleScene extends Phaser.Scene {
       if (v.unit.hp >= v.unit.maxHp && v.hpShow <= 0 && !v.hero) continue;
       const s = v.c.scaleX, w = Math.max(26, v.w * 0.8) * s, x = v.c.x - w / 2, y = v.c.y - (v.h + v.lift) * s - 7;
       g.fillStyle(0x000000, 0.65); g.fillRect(x - 1, y - 1, w + 2, 6);
-      g.fillStyle(v.hero ? 0xffd067 : v.unit.team === 0 ? 0x6fe39a : 0xff7a45, 1); g.fillRect(x, y, w * Math.max(0, v.unit.hp / v.unit.maxHp), 4);
-      if (v.hero) { g.fillStyle(0xffd067, 1); g.fillTriangle(v.c.x - 5, y - 9, v.c.x + 5, y - 9, v.c.x, y - 2); }
+      g.fillStyle(v.hero && v.unit.team === 0 ? 0xffd067 : v.unit.team === 0 ? 0x6fe39a : 0xff7a45, 1); g.fillRect(x, y, w * Math.max(0, v.unit.hp / v.unit.maxHp), 4);
+      if (v.hero) { const c = v.unit.team === 0 ? 0xffd067 : 0xff4d4d; g.fillStyle(c, 1); g.fillTriangle(v.c.x - 5, y - 9, v.c.x + 5, y - 9, v.c.x, y - 2); }
     }
+    // 보스 체력 막대 (위쪽 가운데)
+    const bu = b.bossUnit();
+    if (bu && b.bossDef) {
+      const w = this.W * 0.62, x = this.W / 2 - w / 2, y = this.y0 + 26;
+      g.fillStyle(0x000000, 0.7); g.fillRoundedRect(x - 3, y - 3, w + 6, 16, 6);
+      g.fillStyle(0xff4d4d, 1); g.fillRoundedRect(x, y, w * Math.max(0, bu.hp / bu.maxHp), 10, 4);
+      g.lineStyle(1, 0xffb0b0, 0.8); g.strokeRoundedRect(x, y, w, 10, 4);
+      if (!this.bossText) this.bossText = this.add.text(this.W / 2, y - 12, b.bossDef.name, { fontFamily: 'Black Han Sans, Noto Sans KR, sans-serif', fontSize: '13px', color: '#ffd0d0', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(100001);
+      this.bossText.setPosition(this.W / 2, y - 11).setVisible(true);
+    } else if (this.bossText) this.bossText.setVisible(false);
     // 효과
     for (let i = this.fx.length - 1; i >= 0; i--) {
       const f = this.fx[i]; f.t += dt;
