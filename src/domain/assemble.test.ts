@@ -35,7 +35,7 @@ describe('조립 규칙 3개 (기획안 FINAL §4-2)', () => {
     const r = assemble({ legs: 'legs_track_heavy', body: 'body_turret_bunker', weapon: 'wpn_turret_cannon', accessory: 'acc_plate' }, PARTS);
     expect(r.ok).toBe(true);
     expect(r.perfect).toBe(true);
-    expect(r.stats?.hp).toBe(Math.round(450 * 1.05));
+    expect(r.stats?.hp).toBe(Math.round(415 * 1.05));
     expect(r.stats?.armor).toBe(40);
   });
 

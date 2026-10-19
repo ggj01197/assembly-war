@@ -20,7 +20,7 @@ export const SPEED_UNIT = 1.5;    // 부품 속도 1 = 초당 1.5 칸
 export const BASE_HP = 1000;
 export const WATT_POOL = 10;
 export const WATT_PER_SEC = 0.5;  // 2초에 1
-export const FINAL_MINUTE_MULT = 1.5;
+export const FINAL_MINUTE_MULT = 2;  // 마지막 1분 더블 와트 (CEO 2026-10-19, 1.5 → 2)
 export const OVERTIME_MULT = 2;
 export const POINT_LANE = 1;
 export const POINT_POS = 50;
