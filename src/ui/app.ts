@@ -5,7 +5,7 @@ import { Battle, type Deck } from '../domain/battle/sim';
 import { settle, settleSurvival } from '../domain/rewards';
 import { store, boot, update, flushSave } from '../game/store';
 import { loadSprites } from '../game/unitLayout';
-import { setSoundEnabled, playMusic, preloadMusic } from '../native/audio';
+import { setSoundEnabled, setHapticsEnabled, playMusic, preloadMusic } from '../native/audio';
 import { runOpening } from './opening';
 import { mountHangar } from './hangar';
 import { mountAssembly } from './assembly';
@@ -29,6 +29,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
   await boot();
   await loadSprites();
   setSoundEnabled(store.getState().save.settings.sound);
+  setHapticsEnabled(!store.getState().save.settings.reducedMotion);
 
   const nav: Nav = {
     goHangar: sel => { show('hangar', sel); },

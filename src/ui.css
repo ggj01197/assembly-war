@@ -293,3 +293,10 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .hg-stage em.rule, .st-row em.rule, em.rule { font-style: normal; font: 700 11px var(--body); color: #ffd36a; margin-left: 4px; }
 .rule-tx { font-style: normal; color: #ffd36a; display: block; margin-top: 2px; }
 .bt-hint b { color: #ffd36a; }
+
+/* 연속 처치 표시 */
+.bt-combo { position: absolute; left: 50%; top: calc(var(--safe-top) + 150px); transform: translateX(-50%) scale(.6); opacity: 0; font: 400 30px var(--display); color: #ffe27a; text-shadow: 0 3px 0 #5a2d00, 0 0 18px rgba(255,170,60,.8); pointer-events: none; white-space: nowrap; }
+.bt-combo[data-lv="2"] { color: #ffb347; font-size: 36px; } .bt-combo[data-lv="3"] { color: #ff6b4a; font-size: 42px; }
+.bt-combo.pop { animation: comboPop 1.4s ease-out both; }
+@keyframes comboPop { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 12% { opacity: 1; transform: translateX(-50%) scale(1.25); } 25% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .bt-combo.pop { animation: none; opacity: 1; transform: translateX(-50%); } }

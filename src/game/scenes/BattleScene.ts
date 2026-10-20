@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { LANES, TICK_HZ, BASE_HP, TOWER_NEAR, TOWER_FAR, POINT_LANE, POINT_POS, POINT_RADIUS, POINT_CAPTURE_SEC, type Battle, type BattleEvent, type Unit } from '../../domain/battle/sim';
 import { layoutUnit, spriteUrl, spriteUrlBack } from '../unitLayout';
 import { PARTS } from '../../data/parts';
-import { play, playMusic } from '../../native/audio';
+import { play, playMusic, buzz } from '../../native/audio';
 import type { BattleHud, DragPhase } from '../../ui/battleHud';
 import { skillById, heroById, HERO_WATT, HERO_MOVE_SEC } from '../../domain/loadout';
 import { bossById } from '../../data/bosses';
@@ -359,7 +359,7 @@ export class BattleScene extends Phaser.Scene {
     this.clearSel();
     if (this.drag) { this.drag.ghost.destroy(); this.drag = null; this.hoverLane = -1; }
     play('ready');
-    this.cfg.hud.showOffer(o, 12, id => { if (b.choose(0, id)) { const d = moduleById(id); if (d) this.cfg.hud.toast(`${d.icon} ${d.name}: ${d.desc}`); } });
+    this.cfg.hud.showOffer(o, 12, id => { if (b.choose(0, id)) { buzz('success'); const d = moduleById(id); if (d) this.cfg.hud.toast(`${d.icon} ${d.name}: ${d.desc}`); } });
   }
 
   /** 유닛의 화면 좌표(발 위치)와 원근 크기. 보간 없이 틱 끝 위치 — 이벤트 연출용 */
@@ -446,8 +446,8 @@ export class BattleScene extends Phaser.Scene {
         const tp = this.towerXY(e.team, e.lane), wk = this.W / 390;
         for (let i = 0; i < 5; i++) this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: tp.x + (i - 2) * 16 * tp.s, y2: tp.y - 26 * tp.s - (i % 2) * 20 * tp.s, t: i * 0.08, dur: 0.55, color: 0xffa94d, r: 46 * tp.s * wk });
         this.fx.push({ kind: 'ring', x1: tp.x, y1: tp.y, x2: tp.x, y2: tp.y, t: 0, dur: 0.6, color: 0xffd7a0, r: 70 * tp.s * wk });
-        play('baseHit'); play('boom', 0);
-        if (!calm) this.cameras.main.shake(380, 0.012);
+        play('baseHit'); play('boom', 0); buzz('heavy');
+        if (!calm) { this.cameras.main.shake(380, 0.012); if (e.team === 1) this.cameras.main.flash(140, 255, 236, 200, true); }
         this.cfg.hud.toast(e.team === 1 ? '적 포탑 파괴! 왕관 +1 👑' : '내 포탑이 무너졌어요!');
       } else if (e.type === 'die') {
         const t = this.tOf(e.pos), x = this.laneXAt(e.lane, t), y = this.posToY(e.pos) - 18 * this.scaleAt(t), s = this.scaleAt(t);
@@ -457,6 +457,7 @@ export class BattleScene extends Phaser.Scene {
         this.fx.push({ kind: 'img', key: 'fx_smoke', x1: 0, y1: 0, x2: x, y2: y - 10 * s, t: 0.1, dur: 0.9, color: 0xffffff, r: 22 * s * (this.W / 390), w1: 52 * s * (this.W / 390) });
         this.fx.push({ kind: 'ring', x1: x, y1: y + 10 * s, x2: x, y2: y + 10 * s, t: 0, dur: 0.4, color: 0xffd7a0, r: 40 * s });
         play('boom', 110);
+        if (e.team === 1) this.onKill(b.seconds);
         const big = this.views.get(e.unit);
         if (big && big.k >= 1.5) { for (let i = 0; i < 4; i++) this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: x + (i - 1.5) * 22 * s, y2: y - (i % 2) * 18 * s, t: -i * 0.12, dur: 0.5, color: 0xffa94d, r: 44 * s }); if (!calm) this.cameras.main.shake(320, 0.01); }
         else if (!calm) this.cameras.main.shake(50, 0.0015);
@@ -469,9 +470,17 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** 연속 처치: 2.5초(전투 시간) 안에 이어서 잡으면 이어진다. 3연속부터 표시·진동 */
+  private comboN = 0; private comboAt = -99;
+  private onKill(sec: number) {
+    this.comboN = sec - this.comboAt <= 2.5 ? this.comboN + 1 : 1; this.comboAt = sec;
+    if (this.comboN >= 3) { this.cfg.hud.combo(this.comboN); buzz(this.comboN >= 5 ? 'medium' : 'light'); if (this.comboN === 5 || this.comboN === 8) play('ready'); }
+  }
+
   /** 스킬·영웅 기술 연출 (효과 자체는 sim 이 한다) */
   private skillFx(e: Extract<BattleEvent, { type: 'skill' }>) {
     const b = this.cfg.battle, calm = this.cfg.reducedMotion;
+    if (e.team === 0) buzz('medium'); else if (e.skill.startsWith('boss_')) buzz('heavy');
     const pulse = (team: 0 | 1, color: number, r = 30, delay = 0) => {
       for (const v of this.views.values()) if (v.unit.team === team) this.fx.push({ kind: 'ring', x1: v.c.x, y1: v.c.y, x2: v.c.x, y2: v.c.y - 12 * v.c.scaleX, t: -delay, dur: 0.5, color, r: r * v.c.scaleX });
     };

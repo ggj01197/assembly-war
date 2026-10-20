@@ -70,7 +70,7 @@ const CH3: Raw[] = [
   { id: 'c3-4', rule: 'rl_armor', no: 4, name: '레이저 포대', hint: '방어가 높은 적에는 레이저·방어 깎기가 효과적입니다.', enemy: [laserQuad, fortressCannon, trackMissile, bladeBiped], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 540, rewardExp: 320, enemySkills: ['sk_armor'] },
   { id: 'c3-5', rule: 'rl_heat', no: 5, name: '철벽 라인', hint: '적 저격 영웅이 멀리서 쏩니다. 이동 지시로 길을 옮겨 피하세요.', enemy: [fortressCannon, siegeMortar, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 570, rewardExp: 340, enemyHero: 'hero_sniper', enemySkills: ['sk_overload'] },
   { id: 'c3-6', rule: 'rl_storm', no: 6, name: '장군의 호위', hint: '적이 영웅과 스킬을 모두 씁니다. 와트를 아껴 맞받아치세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 600, rewardExp: 360, enemyHero: 'hero_medic', enemySkills: ['sk_overload', 'sk_repair'] },
-  { no: 7, name: '요새 장군', hint: '보스: 요새 장군의 박격포 일제가 10초마다 내 유닛 3기를 때립니다. 접근전으로 끝내세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 6, enemyWattMult: 0.95, rewardOre: 700, rewardExp: 420, boss: 'boss_general', enemySkills: ['sk_armor'] },
+  { id: 'c3-7', no: 7, name: '요새 장군', hint: '보스: 요새 장군의 박격포 일제가 10초마다 내 유닛 3기를 때립니다. 접근전으로 끝내세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 6, enemyWattMult: 0.95, rewardOre: 700, rewardExp: 420, boss: 'boss_general', enemySkills: ['sk_armor'] },
 ];
 
 export const CHAPTERS: { no: 1 | 2 | 3; name: string; stages: Stage[] }[] = [

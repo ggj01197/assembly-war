@@ -188,5 +188,21 @@ export function playMusic(name: MusicName | null): void {
   });
 }
 
-/** 진동 (Capacitor Haptics 는 5단계 설정 연동 때 연결) */
-export function buzz(_ms: number | number[]): void { /* 후속 */ }
+/** 진동 (Capacitor Haptics). 웹·미지원 기기에서는 아무 일도 하지 않는다. 약 'light' · 중 'medium' · 강 'heavy' · 성공 'success' */
+let hapticsOn = true;
+export function setHapticsEnabled(on: boolean): void { hapticsOn = on; }
+type HapticsMod = typeof import('@capacitor/haptics');
+let hapticsMod: Promise<HapticsMod | null> | null = null;
+export type Buzz = 'light' | 'medium' | 'heavy' | 'success';
+export function buzz(kind: Buzz | number | number[] = 'light'): void {
+  if (!hapticsOn) return;
+  const k: Buzz = typeof kind === 'string' ? kind : 'light';
+  hapticsMod ??= import('@capacitor/haptics').catch(() => null);
+  void hapticsMod.then(m => {
+    if (!m) return;
+    try {
+      if (k === 'success') void m.Haptics.notification({ type: m.NotificationType.Success }).catch(() => {});
+      else void m.Haptics.impact({ style: k === 'heavy' ? m.ImpactStyle.Heavy : k === 'medium' ? m.ImpactStyle.Medium : m.ImpactStyle.Light }).catch(() => {});
+    } catch { /* 진동 실패는 무시 */ }
+  });
+}

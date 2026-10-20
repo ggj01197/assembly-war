@@ -21,6 +21,7 @@ export class BattleHud {
   private timerEl!: HTMLElement; private enemyBar!: HTMLElement; private myBar!: HTMLElement; private enemyNum!: HTMLElement; private myNum!: HTMLElement;
   private wattFill!: HTMLElement; private wattNum!: HTMLElement; private hintEl!: HTMLElement; private toastEl!: HTMLElement; private pointEl!: HTMLElement;
   private quitArmed = 0;
+  private comboT: ReturnType<typeof setTimeout> | null = null;
   private offerEl: HTMLElement | null = null; private offerT: ReturnType<typeof setInterval> | null = null;
   private toastT: ReturnType<typeof setTimeout> | null = null;
   private hintT: ReturnType<typeof setTimeout> | null = null;
@@ -121,6 +122,16 @@ export class BattleHud {
   }
   hideOffer(): void { if (this.offerT) { clearInterval(this.offerT); this.offerT = null; } this.offerEl?.remove(); this.offerEl = null; }
   get offering(): boolean { return !!this.offerEl; }
+
+  /** 연속 처치 표시: 3연속부터 크게 튀어 오른다 (n 이 클수록 색이 달아오름) */
+  combo(n: number): void {
+    let el = this.el.querySelector('.bt-combo') as HTMLElement | null;
+    if (!el) { el = document.createElement('div'); el.className = 'bt-combo'; el.setAttribute('aria-live', 'polite'); this.el.appendChild(el); }
+    el.textContent = `연속 처치 ×${n}`; el.dataset.lv = n >= 8 ? '3' : n >= 5 ? '2' : '1';
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    if (this.comboT) clearTimeout(this.comboT);
+    this.comboT = setTimeout(() => el!.classList.remove('pop'), 1500);
+  }
 
   toast(msg: string): void {
     this.toastEl.textContent = msg; this.toastEl.classList.add('on');
