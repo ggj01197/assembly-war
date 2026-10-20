@@ -31,7 +31,7 @@ for (const st of list) {
     const p = player(st);
     const b = new Battle({ cards: p.cards }, { cards: st.enemy.map(build => ({ build, level: st.enemyLevel })) }, PARTS, 900 + k, {
       wattMult: [1, st.enemyWattMult], skills: [p.skills, st.enemySkills ?? []], heroes: [p.hero, st.enemyHero ?? null], heroLevel: [p.lv, st.enemyLevel],
-      boss: st.boss ?? null, survival: !!st.survival,
+      boss: st.boss ?? null, survival: !!st.survival, modules: process.env.NOMOD ? false : true,
     });
     while (b.step()) { /* run */ }
     const r = b.result();

@@ -1,4 +1,5 @@
-import type { Battle } from '../domain/battle/sim';
+import type { Battle, ModuleOffer } from '../domain/battle/sim';
+import { moduleById, CAT_LABEL, type ModuleDef } from '../domain/modules';
 import type { Stage } from '../data/stages';
 import { BASE_HP, WATT_POOL } from '../domain/battle/sim';
 import { unitFit, esc, partName } from './unitView';
@@ -20,6 +21,7 @@ export class BattleHud {
   private timerEl!: HTMLElement; private enemyBar!: HTMLElement; private myBar!: HTMLElement; private enemyNum!: HTMLElement; private myNum!: HTMLElement;
   private wattFill!: HTMLElement; private wattNum!: HTMLElement; private hintEl!: HTMLElement; private toastEl!: HTMLElement; private pointEl!: HTMLElement;
   private quitArmed = 0;
+  private offerEl: HTMLElement | null = null; private offerT: ReturnType<typeof setInterval> | null = null;
   private toastT: ReturnType<typeof setTimeout> | null = null;
   private hintT: ReturnType<typeof setTimeout> | null = null;
   private costs: number[] = [];
@@ -101,6 +103,25 @@ export class BattleHud {
     this.el.appendChild(b); setTimeout(() => b.classList.add('out'), 2200); setTimeout(() => b.remove(), 2700);
   }
 
+  /** 지휘 모듈 3택 1 — 고르는 동안 전투 시간이 멈춘다(시뮬이 멈춤). 12초 안에 안 고르면 첫 장이 자동 선택된다 */
+  showOffer(offer: ModuleOffer, remainingSec: number, onPick: (id: string) => void): void {
+    this.hintEl.classList.add('gone');
+    this.hideOffer();
+    const defs = offer.ids.map(id => moduleById(id)).filter((d): d is ModuleDef => !!d);
+    const el = document.createElement('div'); el.className = 'bt-offer'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '지휘 모듈 선택');
+    el.innerHTML = `<div class="of-box"><p class="of-ttl">지휘 모듈 <small>하나를 고르세요 · <b class="of-left">12</b>초</small></p>
+      <div class="of-list">${defs.map(d => `<button class="of-card ${d.cat}" data-id="${d.id}" type="button"><i class="of-ic" aria-hidden="true">${d.icon}</i><span class="of-cat">${CAT_LABEL[d.cat]}</span><b>${esc(d.name)}</b><small>${esc(d.desc)}</small></button>`).join('')}</div></div>`;
+    this.el.appendChild(el); this.offerEl = el;
+    let left = 12, done = false;
+    const pick = (id: string) => { if (done) return; done = true; this.hideOffer(); play('ready'); onPick(id); };
+    el.querySelectorAll<HTMLButtonElement>('.of-card').forEach(b => { b.onclick = () => pick(b.dataset.id!); });
+    const lf = el.querySelector('.of-left') as HTMLElement;
+    this.offerT = setInterval(() => { left--; lf.textContent = String(Math.max(0, left)); if (left <= 0) pick(defs[0].id); }, 1000);
+    void remainingSec;
+  }
+  hideOffer(): void { if (this.offerT) { clearInterval(this.offerT); this.offerT = null; } this.offerEl?.remove(); this.offerEl = null; }
+  get offering(): boolean { return !!this.offerEl; }
+
   toast(msg: string): void {
     this.toastEl.textContent = msg; this.toastEl.classList.add('on');
     if (this.toastT) clearTimeout(this.toastT);
@@ -123,9 +144,11 @@ export class BattleHud {
     this.wattNum.textContent = String(Math.floor(w));
     this.pointEl.className = 'bt-point' + (b.controller === 0 ? ' mine' : b.controller === 1 ? ' enemy' : '');
     this.cards.forEach((c, i) => {
+      const cost = b.costOf(0, i);   // 경량화 설계 같은 모듈이 비용을 바꾼다
+      if (this.costs[i] !== cost) { this.costs[i] = cost; const ce = c.querySelector('.cost'); if (ce) ce.textContent = String(cost); c.classList.toggle('cheaper', cost < b.decks[0][i].watt); }
       c.classList.toggle('on', selected === i);
-      c.classList.toggle('ready', this.costs[i] <= w + 1e-9);
-      c.classList.toggle('short', this.costs[i] > w + 1e-9);
+      c.classList.toggle('ready', cost <= w + 1e-9);
+      c.classList.toggle('short', cost > w + 1e-9);
     });
     // 스킬 칸: 쿨다운 가림막 · 와트 부족 · 선택
     this.skillBtns.forEach(c => {
@@ -159,5 +182,5 @@ export class BattleHud {
     return { top: bars ? bars.getBoundingClientRect().bottom : 84, tray: tray ? window.innerHeight - tray.getBoundingClientRect().top : 176 };
   }
 
-  hide(): void { this.el.hidden = true; if (this.hintT) clearTimeout(this.hintT); }
+  hide(): void { this.el.hidden = true; this.hideOffer(); if (this.hintT) clearTimeout(this.hintT); }
 }

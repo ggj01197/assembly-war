@@ -3,6 +3,7 @@ import { assemble, type Build, type UnitStats } from '../assemble';
 import { scaleStats } from '../upgrade';
 import { mulberry32, type Rng } from '../rng';
 import { bossById, type BossDef } from '../../data/bosses';
+import { zeroMods, addMods, offerFor, moduleById, OFFER_TIMES, SURVIVAL_OFFER_TIMES, type Mods, type ModuleDef } from '../modules';
 import { skillById, heroById, SKILL_COOLDOWN_SEC, HERO_WATT, HERO_RESPAWN_SEC, HERO_SKILL_COOLDOWN_SEC, HERO_MOVE_SEC, HERO_MOVE_COOLDOWN_SEC, type HeroDef } from '../loadout';
 
 /**
@@ -50,6 +51,8 @@ export interface BattleResult {
   /** 카드별 생산 수·가한 피해 (balance-sim 이 부품 승률·기여를 보기 위해, 결과 화면이 "어느 설계도가 밀렸는지" 보여 주려고) */
   spawnsByCard: [number[], number[]];
   damageByCard: [number[], number[]];
+  /** 판 중 고른 지휘 모듈 id (팀별) */
+  modules: [string[], string[]];
 }
 
 export interface Unit {
@@ -68,7 +71,8 @@ export type BattleEvent =
   | { type: 'tower'; team: Team; lane: number; to: number; dmg: number }          // 포탑이 유닛을 쏨
   | { type: 'towerDown'; team: Team; lane: number }                  // 포탑 파괴 (team = 무너진 쪽)
   | { type: 'point'; controller: Team | -1 }
-  | { type: 'skill'; team: Team; skill: string; lane: number; unit: number | null };
+  | { type: 'skill'; team: Team; skill: string; lane: number; unit: number | null }
+  | { type: 'module'; team: Team; id: string };
 
 export interface Prepared { stats: UnitStats; watt: number; build: Build; level: number }
 
@@ -101,7 +105,12 @@ export interface BattleOptions {
   survival?: boolean;
   /** 길마다 방어 포탑을 둔다 (기본 켬) */
   towers?: boolean;
+  /** 판 중 지휘 모듈 3택 1 (기본 끔 — 실제 전투·스테이지 시뮬만 켠다) */
+  modules?: boolean;
 }
+
+/** 사람이 고를 차례인 모듈 3장 */
+export interface ModuleOffer { team: Team; index: number; ids: string[] }
 
 export interface Tower { hp: number; maxHp: number; cd: number }
 
@@ -151,6 +160,14 @@ export class Battle {
   /** towers[팀][길] */
   readonly towers: [Tower[], Tower[]] = [[], []];
   readonly towersOn: boolean;
+  /** 지휘 모듈: 팀별 누적 수치·고른 것·지금 사람이 고르는 중인 3장(있으면 step() 은 시간을 멈춘다) */
+  readonly mod: [Mods, Mods] = [zeroMods(), zeroMods()];
+  readonly picked: [string[], string[]] = [[], []];
+  offer: ModuleOffer | null = null;
+  readonly modulesOn: boolean;
+  private offerIdx = 0;
+  private seed: number;
+  private modRng: Rng;
 
   private rng: Rng;
   private nextId = 1;
@@ -163,7 +180,8 @@ export class Battle {
   private boss: { def: BossDef; spawned: boolean; unit: number | null; nextTick: number } | null = null;
 
   constructor(deckA: Deck, deckB: Deck, parts: Part[], seed: number, opts: BattleOptions = {}) {
-    this.rng = mulberry32(seed);
+    this.rng = mulberry32(seed); this.seed = seed; this.modRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
+    this.modulesOn = !!opts.modules;
     this.decks = [prepareDeck(deckA, parts), prepareDeck(deckB, parts)];
     this.spawnsByCard = [this.decks[0].map(() => 0), this.decks[1].map(() => 0)];
     this.damageByCard = [this.decks[0].map(() => 0), this.decks[1].map(() => 0)];
@@ -184,7 +202,9 @@ export class Battle {
   }
 
   private credit(u: Unit, v: number) { if (u.card >= 0) this.damageByCard[u.team][u.card] += v; }
-  private armorOf(e: Unit): number { return Math.max(0, e.stats.armor - (this.eff.armorDown[e.team] > 0 ? 20 : 0)); }
+  private armorOf(e: Unit): number { return Math.max(0, e.stats.armor + this.mod[e.team].armor - (this.eff.armorDown[e.team] > 0 ? 20 : 0)); }
+  /** 카드를 낼 때 드는 와트 (경량화 설계 반영, 최소 1) */
+  costOf(team: Team, cardIdx: number): number { const w = this.decks[team][cardIdx]?.watt ?? 99; return Math.max(Math.min(1, w), w - this.mod[team].discount); }
   private count(t: Team) { return this.units.filter(u => u.team === t && !u.hero).length; }
 
   get seconds(): number { return this.tick / TICK_HZ; }
@@ -205,11 +225,13 @@ export class Battle {
     if (this.over) return false;
     const card = this.decks[team][cardIdx];
     if (!card || lane < 0 || lane >= LANES) return false;
-    if (card.watt > this.watt[team] + 1e-9) return false;
+    const cost = this.costOf(team, cardIdx);
+    if (cost > this.watt[team] + 1e-9) return false;
     if (this.count(team) >= MAX_UNITS_PER_TEAM) return false;
-    this.watt[team] -= card.watt; this.wattSpent[team] += card.watt;
+    this.watt[team] -= cost; this.wattSpent[team] += cost;
     const u: Unit = { id: this.nextId++, team, lane, pos: team === 0 ? 0 : LANE_LEN, prev: team === 0 ? 0 : LANE_LEN, moving: false, hero: null, ghost: 0, toLane: lane, moveCd: 0, hp: 0, maxHp: 0, stats: card.stats, cd: 0, card: cardIdx };
     if (this.survival && team === 1) { const w = this.wave; u.stats = { ...card.stats, hp: Math.round(card.stats.hp * (1 + 0.07 * w)), dmg: Math.round(card.stats.dmg * (1 + 0.05 * w) * 100) / 100 }; }
+    if (this.mod[team].hp) u.stats = { ...u.stats, hp: Math.round(u.stats.hp * (1 + this.mod[team].hp)) };
     u.hp = u.maxHp = u.stats.hp;
     this.units.push(u);
     this.spawned[team]++; this.spawnsByCard[team][cardIdx]++;
@@ -227,6 +249,11 @@ export class Battle {
       this.overtime = true; // 동률이면 연장
     }
     if (this.tick >= this.maxTicks) { this.over = true; return false; }
+    if (this.modulesOn) {
+      const times = this.survival ? SURVIVAL_OFFER_TIMES : OFFER_TIMES;
+      if (!this.offer && this.offerIdx < times.length && sec >= times[this.offerIdx]) this.openOffer();
+      if (this.offer) return true;   // 사람이 고를 때까지 시간이 멈춘다
+    }
 
     const { units, baseHp, watt, rng } = this;
     const basePos = (t: Team) => (t === 0 ? LANE_LEN : 0); // t 가 공격하는 상대 기지 위치
@@ -237,12 +264,16 @@ export class Battle {
       for (const k of ['overload', 'shield', 'slow', 'armorDown', 'charge'] as const) this.eff[k][t] = Math.max(0, this.eff[k][t] - 1);
       const h = this.hero[t]; if (h) { h.respawn = Math.max(0, h.respawn - 1); h.skillCd = Math.max(0, h.skillCd - 1); }
     }
-    for (const u of this.units) if (u.moveCd > 0) u.moveCd--;
+    for (const u of this.units) {
+      if (u.moveCd > 0) u.moveCd--;
+      const rg = this.mod[u.team].regen;
+      if (rg && u.hp > 0 && u.hp < u.maxHp) u.hp = Math.min(u.maxHp, u.hp + (u.maxHp * rg) / TICK_HZ);
+    }
 
     // 1. 와트 충전
     const mult = this.overtime ? OVERTIME_MULT : !this.survival && sec >= this.matchSec - 60 ? FINAL_MINUTE_MULT : 1;
     for (const t of [0, 1] as Team[]) {
-      const bonus = (this.controller === t ? POINT_BONUS : 1) * (this.eff.charge[t] > 0 ? 2 : 1);
+      const bonus = (this.controller === t ? POINT_BONUS : 1) * (this.eff.charge[t] > 0 ? 2 : 1) * (1 + this.mod[t].wattRate);
       watt[t] = Math.min(WATT_POOL, watt[t] + (WATT_PER_SEC * mult * bonus * this.wattMult[t] * (this.survival && t === 1 ? 1 + 0.04 * this.wave : 1)) / TICK_HZ);
     }
 
@@ -266,7 +297,7 @@ export class Battle {
           for (let k = 0; k < weights.length; k++) { r -= weights[k]; if (r <= 0) { planned = k; break; } }
           this.plan[t] = planned;
         }
-        if (this.decks[t][planned].watt > watt[t] + 1e-9) continue;
+        if (this.costOf(t, planned) > watt[t] + 1e-9) continue;
         // 길: 적이 많은 길을 우선, 동률이면 무작위
         const pressure = [0, 0, 0];
         for (const e of enemies) pressure[e.lane] += 1;
@@ -289,8 +320,10 @@ export class Battle {
       if (u.hp <= 0) continue;
       u.cd -= 1;
       if (u.cd > 0) continue;
-      const range = u.stats.range * RANGE_UNIT;
-      const rate = Math.max(0.2, u.stats.rate) * (this.eff.overload[u.team] > 0 ? 1.3 : 1);
+      const mu = this.mod[u.team];
+      const range = u.stats.range * RANGE_UNIT * (1 + mu.range);
+      const pc = Math.min(0.9, u.stats.pierce + mu.pierce);
+      const rate = Math.max(0.2, u.stats.rate) * (this.eff.overload[u.team] > 0 ? 1.3 : 1) * (1 + mu.rate);
       if (u.stats.family === 'repair') {
         // 사거리 안에서 체력 비율이 가장 낮은 아군 (자기 자신 제외)
         let ally: Unit | null = null, low = 1;
@@ -322,8 +355,8 @@ export class Battle {
         if (d <= range && d >= minR && (d < best || (d === best && target && e.id < target.id))) { best = d; target = e; }
       }
       if (target) {
-        const armor = this.armorOf(target) * (1 - u.stats.pierce);
-        const dealt = Math.max(1, u.stats.dmg * (1 - armor / 100));
+        const armor = this.armorOf(target) * (1 - pc);
+        const dealt = Math.max(1, u.stats.dmg * (1 + mu.dmg) * (1 - armor / 100));
         unitDamage.set(target.id, (unitDamage.get(target.id) ?? 0) + dealt);
         this.credit(u, dealt);
         this.events.push({ type: 'attack', from: u.id, to: target.id, baseOf: null, lane: u.lane, family: u.stats.family, dmg: dealt });
@@ -331,7 +364,7 @@ export class Battle {
           for (const e of units) {
             if (e === target || e.team === u.team || e.lane !== u.lane || e.ghost > 0 || e.stats.move !== target.stats.move) continue;
             if (Math.abs(e.pos - target.pos) <= u.stats.splash) {
-              const sp = Math.max(1, u.stats.dmg * SPLASH_MULT * (1 - this.armorOf(e) * (1 - u.stats.pierce) / 100));
+              const sp = Math.max(1, u.stats.dmg * (1 + mu.dmg) * SPLASH_MULT * (1 - this.armorOf(e) * (1 - pc) / 100));
               unitDamage.set(e.id, (unitDamage.get(e.id) ?? 0) + sp);
               this.credit(u, sp);
             }
@@ -342,15 +375,16 @@ export class Battle {
         // 상대 포탑이 서 있으면 먼저 포탑을 친다 (공중 전용 무기는 못 침)
         const opp: Team = u.team === 0 ? 1 : 0, tp = u.team === 0 ? TOWER_FAR : TOWER_NEAR, d = Math.abs(tp - u.pos);
         if (u.stats.target !== 'air' && d <= range && d >= minR) {
-          const dealt = Math.max(1, u.stats.dmg * (1 - TOWER_ARMOR * (1 - u.stats.pierce) / 100));
+          const dealt = Math.max(1, u.stats.dmg * (1 + mu.dmg) * (1 + mu.towerDmg) * (1 - TOWER_ARMOR * (1 - pc) / 100));
           towerDmg[opp][u.lane] += dealt; this.credit(u, dealt);
           this.events.push({ type: 'attack', from: u.id, to: null, baseOf: null, towerOf: opp, lane: u.lane, family: u.stats.family, dmg: dealt });
           u.cd = Math.round(TICK_HZ / rate);
         } else u.cd = 0;
       } else if (Math.abs(basePos(u.team) - u.pos) <= range && Math.abs(basePos(u.team) - u.pos) >= minR && u.stats.target !== 'air') {
         const opp: Team = u.team === 0 ? 1 : 0;
-        baseDmg[opp] += u.stats.dmg;
-        this.credit(u, u.stats.dmg);
+        const bd = u.stats.dmg * (1 + mu.dmg) * (1 + mu.towerDmg);
+        baseDmg[opp] += bd;
+        this.credit(u, bd);
         this.events.push({ type: 'attack', from: u.id, to: null, baseOf: opp, lane: u.lane, family: u.stats.family });
         u.cd = Math.round(TICK_HZ / rate);
       } else {
@@ -390,7 +424,7 @@ export class Battle {
         if (tw.hp <= 0) { tw.hp = 0; this.events.push({ type: 'towerDown', team: t, lane: l }); }
       }
     }
-    for (const t of [0, 1] as Team[]) if (this.eff.shield[t] > 0) baseDmg[t] *= 0.5;
+    for (const t of [0, 1] as Team[]) { if (this.eff.shield[t] > 0) baseDmg[t] *= 0.5; baseDmg[t] *= 1 - this.mod[t].baseGuard; }
     if (this.survival) baseDmg[1] = 0;
     baseHp[0] -= baseDmg[0]; baseHp[1] -= baseDmg[1];
     for (const u of units) if (u.hp <= 0) {
@@ -401,7 +435,7 @@ export class Battle {
     // 4. 이동 (공격할 대상·기지가 사거리 안에 없을 때만)
     for (const u of units) {
       if (u.ghost > 0) { u.prev = u.pos; u.moving = false; continue; }
-      const range = u.stats.range * RANGE_UNIT, minR = u.stats.minRange * RANGE_UNIT;
+      const range = u.stats.range * RANGE_UNIT * (1 + this.mod[u.team].range), minR = u.stats.minRange * RANGE_UNIT;
       let engaged = false;
       if (u.stats.family === 'repair') {
         engaged = units.some(a => a !== u && a.team === u.team && a.lane === u.lane && a.hp < a.maxHp && a.ghost === 0 && Math.abs(a.pos - u.pos) <= range);
@@ -420,7 +454,7 @@ export class Battle {
         }
       }
       u.prev = u.pos; u.moving = false;
-      if (!engaged) { u.pos = Math.min(LANE_LEN, Math.max(0, u.pos + (u.team === 0 ? 1 : -1) * u.stats.speed * (this.eff.slow[u.team] > 0 ? 0.6 : 1) * SPEED_UNIT / TICK_HZ)); u.moving = u.pos !== u.prev; }
+      if (!engaged) { u.pos = Math.min(LANE_LEN, Math.max(0, u.pos + (u.team === 0 ? 1 : -1) * u.stats.speed * (this.eff.slow[u.team] > 0 ? 0.6 : 1) * (1 + this.mod[u.team].speed) * SPEED_UNIT / TICK_HZ)); u.moving = u.pos !== u.prev; }
     }
 
     // 5. 중앙 거점 점유
@@ -428,7 +462,7 @@ export class Battle {
     for (const u of units) if (u.ghost === 0 && u.lane === POINT_LANE && Math.abs(u.pos - POINT_POS) <= POINT_RADIUS) near[u.team]++;
     for (const t of [0, 1] as Team[]) {
       const o: Team = t === 0 ? 1 : 0;
-      if (near[t] > 0 && near[o] === 0) this.pointTimer[t] = Math.min(POINT_CAPTURE_SEC, this.pointTimer[t] + 1 / TICK_HZ);
+      if (near[t] > 0 && near[o] === 0) this.pointTimer[t] = Math.min(POINT_CAPTURE_SEC, this.pointTimer[t] + (1 + this.mod[t].capture) / TICK_HZ);
       else if (near[o] > 0) this.pointTimer[t] = 0;
     }
     const prev = this.controller;
@@ -475,7 +509,7 @@ export class Battle {
     if (def.needsLane && (lane < 0 || lane >= LANES)) return false;
     const opp: Team = team === 0 ? 1 : 0, dur = Math.round((def.dur ?? 0) * TICK_HZ);
     this.watt[team] -= def.watt; this.wattSpent[team] += def.watt; this.skillUses[team]++;
-    this.skillCd[team][slot] = SKILL_COOLDOWN_SEC * TICK_HZ;
+    this.skillCd[team][slot] = Math.round(SKILL_COOLDOWN_SEC * TICK_HZ * (1 - this.mod[team].skillCd));
     switch (def.id) {
       case 'sk_bomb': for (const e of this.units) if (e.team === opp && e.lane === lane && e.ghost === 0) e.hp -= 80; break;
       case 'sk_overload': this.eff.overload[team] = dur; break;
@@ -495,7 +529,8 @@ export class Battle {
     const h = this.hero[team];
     if (this.over || !h || h.unit !== null || h.respawn > 0 || lane < 0 || lane >= LANES || this.watt[team] + 1e-9 < HERO_WATT) return false;
     this.watt[team] -= HERO_WATT; this.wattSpent[team] += HERO_WATT; this.heroDeploys[team]++;
-    const st = { ...h.def.stats, hp: Math.round(h.def.stats.hp * h.mult), dmg: Math.round(h.def.stats.dmg * h.mult) };
+    const hm = h.mult * (1 + this.mod[team].hero);
+    const st = { ...h.def.stats, hp: Math.round(h.def.stats.hp * hm), dmg: Math.round(h.def.stats.dmg * hm) };
     const pos = team === 0 ? 0 : LANE_LEN;
     const u: Unit = { id: this.nextId++, team, lane, pos, prev: pos, moving: false, hero: h.def.id, ghost: 0, toLane: lane, moveCd: 0, hp: st.hp, maxHp: st.hp, stats: st, cd: 0, card: -1 };
     this.units.push(u); h.unit = u.id;
@@ -568,6 +603,45 @@ export class Battle {
     return saving && this.hero[t]!.unit === null;
   }
 
+  // ───────── 지휘 모듈 (판 중 3택 1) ─────────
+  private openOffer(): void {
+    const idx = this.offerIdx++;
+    for (const t of [0, 1] as Team[]) {
+      if (this.survival && t === 1) continue;
+      const ids = offerFor(this.seed, t, idx, this.picked[t]);
+      if (!ids.length) continue;
+      if (this.bots[t]) this.apply(t, moduleById(ids[Math.floor(this.modRng() * ids.length)])!);
+      else this.offer = { team: t, index: idx, ids };
+    }
+  }
+
+  /** 사람이 3장 중 하나를 고른다. 성공 여부를 돌려준다 */
+  choose(team: Team, id: string): boolean {
+    const o = this.offer;
+    if (!o || o.team !== team || !o.ids.includes(id)) return false;
+    this.offer = null;
+    this.apply(team, moduleById(id)!);
+    return true;
+  }
+
+  private apply(team: Team, def: ModuleDef): void {
+    const before = this.mod[team].hp;
+    addMods(this.mod[team], def);
+    this.picked[team].push(def.id);
+    if (def.mods?.hp) {
+      const r = (1 + this.mod[team].hp) / (1 + before);
+      for (const u of this.units) if (u.team === team && !u.hero && u.hp > 0) { u.maxHp = Math.round(u.maxHp * r); u.hp = Math.round(u.hp * r); u.stats = { ...u.stats, hp: u.maxHp }; }
+    }
+    if (def.instant === 'repair') {
+      for (const u of this.units) if (u.team === team && u.hp > 0) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.4);
+      this.baseHp[team] = Math.min(BASE_HP, this.baseHp[team] + 100);
+    } else if (def.instant === 'surge') this.watt[team] = Math.min(WATT_POOL, this.watt[team] + 4);
+    else if (def.instant === 'towerHp') {
+      for (const tw of this.towers[team]) if (tw.hp > 0) { tw.maxHp = Math.round(tw.maxHp + TOWER_HP * 0.4); tw.hp = Math.min(tw.maxHp, tw.hp + TOWER_HP * 0.4); }
+    }
+    this.pre.push({ type: 'module', team, id: def.id });
+  }
+
   /** 5분 버티기 이어하기(광고): 내 기지를 절반 체력으로 되살리고 30초 보호막, 기지 앞 적은 쓸어낸다 */
   revive(): void {
     if (!this.survival || !this.over) return;
@@ -582,6 +656,7 @@ export class Battle {
     return {
       winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime, crowns: [this.crowns(0), this.crowns(1)], skillUses: [...this.skillUses], heroDeploys: [...this.heroDeploys], wattSpent: [...this.wattSpent],
       spawned: [...this.spawned], kills: [...this.kills], spawnsByCard: [[...this.spawnsByCard[0]], [...this.spawnsByCard[1]]], damageByCard: [[...this.damageByCard[0]], [...this.damageByCard[1]]],
+      modules: [[...this.picked[0]], [...this.picked[1]]],
     } as BattleResult;
   }
 }

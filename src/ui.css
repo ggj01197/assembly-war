@@ -276,3 +276,17 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .rs-ad { display: grid; gap: 8px; margin-top: 4px; } .rs-ad .btn { min-height: 46px; }
 
 .btn.ad small { display: block; margin: 0; }
+
+/* 지휘 모듈 3택 1 (판 중, 시간 정지) */
+.bt-offer { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(4,9,16,.72); pointer-events: auto; padding: 16px; }
+.bt-offer .of-box { width: 100%; max-width: 430px; }
+.bt-offer .of-ttl { margin: 0 0 12px; text-align: center; font: 800 22px var(--body); color: #fff; }
+.bt-offer .of-ttl small { display: block; margin-top: 4px; font: 700 13px var(--body); color: var(--cyan); text-shadow: none; }
+.bt-offer .of-list { display: grid; gap: 10px; }
+.bt-offer .of-card { position: relative; display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; text-align: left; min-height: 64px; padding: 10px 14px 10px 12px; border-radius: 14px; border: 2px solid var(--cyan); background: linear-gradient(180deg, rgba(20,38,62,.98), rgba(10,20,36,.98)); color: #fff; cursor: pointer; }
+.bt-offer .of-card.atk { border-color: #ff8a5c; } .bt-offer .of-card.def { border-color: #6fd6a0; } .bt-offer .of-card.eco { border-color: #ffd36a; }
+.bt-offer .of-ic { grid-row: 1 / 3; font-style: normal; font-size: 30px; text-align: center; }
+.bt-offer .of-card b { font: 700 16px var(--body); } .bt-offer .of-card small { grid-column: 2; font: 600 13px/1.35 var(--body); color: #c9d6e6; }
+.bt-offer .of-cat { position: absolute; top: 8px; right: 12px; font: 700 11px var(--body); letter-spacing: .08em; color: #9fb3c9; }
+.bt-offer .of-card:active { transform: scale(.98); }
+.card.cheaper .cost { color: #7dffb0; }

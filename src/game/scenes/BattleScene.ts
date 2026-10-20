@@ -6,6 +6,7 @@ import { play, playMusic } from '../../native/audio';
 import type { BattleHud, DragPhase } from '../../ui/battleHud';
 import { skillById, heroById, HERO_WATT, HERO_MOVE_SEC } from '../../domain/loadout';
 import { bossById } from '../../data/bosses';
+import { moduleById } from '../../domain/modules';
 import type { Stage } from '../../data/stages';
 
 /**
@@ -258,7 +259,7 @@ export class BattleScene extends Phaser.Scene {
         this.drag.ghost.destroy(); this.drag = null;
         if (ph === 'end') {
           if (y < (this.y0 + this.y1) / 2) { hud.toast('아군 진영(아래쪽)에 놓아 주세요.'); play('deny'); }
-          else if (!b.spawn(0, card, this.laneAt(x, y))) { play('deny'); hud.toast(b.decks[0][card].watt > b.watt[0] ? '와트가 부족해요. 조금 기다리세요.' : '유닛이 너무 많아요.'); }
+          else if (!b.spawn(0, card, this.laneAt(x, y))) { play('deny'); hud.toast(b.costOf(0, card) > b.watt[0] ? '와트가 부족해요. 조금 기다리세요.' : '유닛이 너무 많아요.'); }
           else this.selected = null;
         }
         this.hoverLane = -1;
@@ -322,7 +323,7 @@ export class BattleScene extends Phaser.Scene {
     const lane = this.laneAt(x, y);
     if (!b.spawn(0, this.selected, lane)) {
       play('deny');
-      hud.toast(b.decks[0][this.selected].watt > b.watt[0] ? '와트가 부족해요. 조금 기다리세요.' : '유닛이 너무 많아요.');
+      hud.toast(b.costOf(0, this.selected) > b.watt[0] ? '와트가 부족해요. 조금 기다리세요.' : '유닛이 너무 많아요.');
     }
   }
 
@@ -333,7 +334,8 @@ export class BattleScene extends Phaser.Scene {
     const stepMs = 1000 / TICK_HZ;
     if (!this.ended) {
       this.acc += Math.min(100, delta);
-      while (this.acc >= stepMs && !b.over) { b.step(); this.consume(b.events); this.acc -= stepMs; }
+      while (this.acc >= stepMs && !b.over && !b.offer) { b.step(); this.consume(b.events); this.acc -= stepMs; if (b.offer) this.openOffer(); }
+      if (b.offer) { this.acc = 0; if (!this.cfg.hud.offering) this.openOffer(); }
       if (b.over) {
         this.ended = true;
         if (b.baseHp[1] <= 0 || b.baseHp[0] <= 0) { play('baseHit'); if (!this.cfg.reducedMotion) this.cameras.main.shake(260, 0.01); }
@@ -350,6 +352,15 @@ export class BattleScene extends Phaser.Scene {
     if (b.watt[0] >= 9.99 && !this.wattFull) { this.wattFull = true; play('ready'); } else if (b.watt[0] < 9) this.wattFull = false;
   }
 
+  /** 지휘 모듈 3택 1: 시간이 멈춘 채 고르면 다시 흐른다 */
+  private openOffer() {
+    const b = this.cfg.battle, o = b.offer; if (!o || this.cfg.hud.offering) return;
+    this.clearSel();
+    if (this.drag) { this.drag.ghost.destroy(); this.drag = null; this.hoverLane = -1; }
+    play('ready');
+    this.cfg.hud.showOffer(o, 12, id => { if (b.choose(0, id)) { const d = moduleById(id); if (d) this.cfg.hud.toast(`${d.icon} ${d.name}: ${d.desc}`); } });
+  }
+
   /** 유닛의 화면 좌표(발 위치)와 원근 크기. 보간 없이 틱 끝 위치 — 이벤트 연출용 */
   private posOf(id: number, b: Battle): { x: number; y: number; s: number; h: number } | null {
     const u = b.units.find(q => q.id === id);
@@ -362,6 +373,10 @@ export class BattleScene extends Phaser.Scene {
     const b = this.cfg.battle;
     const calm = this.cfg.reducedMotion;
     for (const e of evs) {
+      if (e.type === 'module') {
+        if (e.team === 1) { const d = moduleById(e.id); if (d) this.cfg.hud.toast(`적이 「${d.name}」 장착`); }
+        continue;
+      }
       if (e.type === 'spawn') {
         const u = b.units.find(q => q.id === e.unit); if (!u) continue;
         const t = this.tOf(u.pos), x = this.laneXAt(e.lane, t), y = this.posToY(u.pos), s = this.scaleAt(t);

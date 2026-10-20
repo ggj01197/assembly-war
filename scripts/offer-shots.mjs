@@ -1,0 +1,36 @@
+// 지휘 모듈 선택 화면 점검: 전투를 시작해 시간을 45초로 당겨 3장이 뜨는지·고르면 재개되는지 캡처 (개발 서버 5190 필요)
+//   node scripts/offer-shots.mjs [폭=390] [높이=844] [출력폴더]
+import { chromium } from 'playwright-core';
+import { mkdirSync } from 'node:fs';
+const W = Number(process.argv[2] ?? 390), H = Number(process.argv[3] ?? 844);
+const OUT = process.argv[4] ?? process.env.TEMP + '/aw-shots';
+mkdirSync(OUT, { recursive: true });
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+const errors = [];
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
+await page.evaluate(id => window.__aw.startBattle(id), process.env.STAGE ?? 'c1-3');
+await page.waitForSelector('.screen.battle:not([hidden])');
+await page.waitForTimeout(800);
+await page.evaluate(() => { const b = window.__aw.battle; while (b.tick < 44.9 * 20) b.step(); });
+await page.waitForSelector('.bt-offer', { timeout: 5000 });
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/${W}x${H}_offer.png` });
+const t0 = await page.evaluate(() => window.__aw.battle.tick);
+await page.waitForTimeout(1200);
+const t1 = await page.evaluate(() => window.__aw.battle.tick);
+console.log('시간 정지', t0 === t1, t0, t1);
+const ids = await page.evaluate(() => [...document.querySelectorAll('.of-card')].map(e => e.dataset.id));
+console.log('cards', ids.join(','));
+await page.locator('.of-card').nth(2).click();
+await page.waitForTimeout(1500);
+const t2 = await page.evaluate(() => window.__aw.battle.tick);
+console.log('재개', t2 > t1, '고른 것', await page.evaluate(() => JSON.stringify(window.__aw.battle.picked)));
+await page.screenshot({ path: `${OUT}/${W}x${H}_after.png` });
+const over = await page.evaluate(() => { const o = document.querySelector('.bt-offer'); const r = [...document.querySelectorAll('.of-card')].map(e => e.getBoundingClientRect().height); return { open: !!o, r }; });
+console.log(over, 'errors', errors.length, errors);
+await browser.close();

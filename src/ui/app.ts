@@ -57,7 +57,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
       bots: [false, true], wattMult: [1, stage.enemyWattMult],
       skills: [s.loadout.skills, stage.enemySkills ?? []], heroes: [s.loadout.hero, stage.enemyHero ?? null],
       heroLevel: [commanderLevel(s.commanderExp).level, stage.enemyLevel],
-      boss: stage.boss ?? null, survival: !!stage.survival,
+      boss: stage.boss ?? null, survival: !!stage.survival, modules: true,
     });
     if (current) screens[current].hide();
     current = null;
