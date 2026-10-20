@@ -290,3 +290,6 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .bt-offer .of-cat { position: absolute; top: 8px; right: 12px; font: 700 11px var(--body); letter-spacing: .08em; color: #9fb3c9; }
 .bt-offer .of-card:active { transform: scale(.98); }
 .card.cheaper .cost { color: #7dffb0; }
+.hg-stage em.rule, .st-row em.rule, em.rule { font-style: normal; font: 700 11px var(--body); color: #ffd36a; margin-left: 4px; }
+.rule-tx { font-style: normal; color: #ffd36a; display: block; margin-top: 2px; }
+.bt-hint b { color: #ffd36a; }

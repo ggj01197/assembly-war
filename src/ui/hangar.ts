@@ -8,6 +8,7 @@ import { freeChestReady } from '../domain/supply';
 import { levelMultiplier } from '../domain/upgrade';
 import { unitFit, partName, esc, TARGET_LABEL } from './unitView';
 import { play } from '../native/audio';
+import { ruleById } from '../data/rules';
 import type { Nav, Screen } from './app';
 import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
 import { canAttend, missionDone, todayStr } from '../domain/daily';
@@ -148,7 +149,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
           const rec = s.stages[st.id];
           return `<button class="stage ${open ? '' : 'locked'}" data-id="${st.id}" type="button" ${open ? '' : 'disabled'}>
             <i class="no">${st.no}</i>
-            <span class="tx"><b>${esc(st.name)}${st.boss ? ' <em>보스</em>' : ''}</b><small>${open ? esc(st.hint) : '앞 작전을 먼저 끝내세요'}</small></span>
+            <span class="tx"><b>${esc(st.name)}${st.boss ? ' <em>보스</em>' : ''}${ruleById(st.rule) ? ` <em class="rule">${ruleById(st.rule)!.icon} ${esc(ruleById(st.rule)!.name)}</em>` : ''}</b><small>${open ? esc(st.hint) : '앞 작전을 먼저 끝내세요'}${open && ruleById(st.rule) ? ` <i class="rule-tx">규칙: ${esc(ruleById(st.rule)!.desc)}</i>` : ''}</small></span>
             <span class="rw">${rec?.clears ? '<em>✓ 완료</em>' : `광석 ${st.rewardOre}`}</span>
           </button>`;
         }).join('');

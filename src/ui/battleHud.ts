@@ -41,11 +41,11 @@ export class BattleHud {
     this.el.innerHTML = `
       <header class="bt-top">
         <button class="quit" type="button" aria-label="나가기">나가기</button>
-        <div class="bt-mid"><b id="btTime">3:00</b><i class="crowns" id="btCrowns"></i><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}</small></div>
+        <div class="bt-mid"><b id="btTime">3:00</b><i class="crowns" id="btCrowns"></i><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}${battle.rule ? ` · ${battle.rule.icon} ${esc(battle.rule.name)}` : ''}</small></div>
         <div class="bt-point" id="btPoint" title="중앙 거점">거점</div>
       </header>
       <div class="bt-bars top"><span>적 기지</span><i class="hpbar"><u id="btEnemy"></u></i><em id="btEnemyN">${BASE_HP}</em></div>
-      <div class="bt-hint" id="btHint">${esc(stage.hint)}</div>
+      <div class="bt-hint" id="btHint">${battle.rule ? `<b>${battle.rule.icon} ${esc(battle.rule.name)}</b> ${esc(battle.rule.desc)}<br>` : ''}${esc(stage.hint)}</div>
       <div class="bt-toast" id="btToast"></div>
       <footer class="bt-tray">
         <div class="bt-bars"><span>내 기지</span><i class="hpbar mine"><u id="btMine"></u></i><em id="btMineN">${BASE_HP}</em></div>
@@ -164,7 +164,8 @@ export class BattleHud {
     if (hs && this.heroBtn && this.heroSkillBtn && this.heroTx) {
       const u = b.heroUnit(0);
       let tx: string, cls: string;
-      if (!u) { if (hs.respawn > 0) { tx = `${Math.ceil(hs.respawn / TICK_HZ)}초`; cls = 'dead'; } else { tx = `출격 ${HERO_WATT}`; cls = w >= HERO_WATT - 1e-9 ? 'ready' : 'short'; } }
+      if (b.rule?.id === 'rl_nohero') { tx = '봉쇄'; cls = 'dead'; }
+      else if (!u) { if (hs.respawn > 0) { tx = `${Math.ceil(hs.respawn / TICK_HZ)}초`; cls = 'dead'; } else { tx = `출격 ${HERO_WATT}`; cls = w >= HERO_WATT - 1e-9 ? 'ready' : 'short'; } }
       else if (u.ghost > 0) { tx = '이동 중'; cls = 'deployed'; }
       else { tx = sel.hero ? '길 선택' : u.moveCd > 0 ? `이동 ${Math.ceil(u.moveCd / TICK_HZ)}` : '이동'; cls = 'deployed'; }
       this.heroTx.textContent = tx;

@@ -3,6 +3,7 @@ import { assemble, type Build, type UnitStats } from '../assemble';
 import { scaleStats } from '../upgrade';
 import { mulberry32, type Rng } from '../rng';
 import { bossById, type BossDef } from '../../data/bosses';
+import { ruleById, stormMult, WEAK_TOWER_MULT, type RuleDef } from '../../data/rules';
 import { zeroMods, addMods, offerFor, moduleById, OFFER_TIMES, SURVIVAL_OFFER_TIMES, type Mods, type ModuleDef } from '../modules';
 import { skillById, heroById, SKILL_COOLDOWN_SEC, HERO_WATT, HERO_RESPAWN_SEC, HERO_SKILL_COOLDOWN_SEC, HERO_MOVE_SEC, HERO_MOVE_COOLDOWN_SEC, type HeroDef } from '../loadout';
 
@@ -107,6 +108,8 @@ export interface BattleOptions {
   towers?: boolean;
   /** 판 중 지휘 모듈 3택 1 (기본 끔 — 실제 전투·스테이지 시뮬만 켠다) */
   modules?: boolean;
+  /** 작전 변형 규칙 id (data/rules.ts) — 양쪽에 똑같이 적용 */
+  rule?: string | null;
 }
 
 /** 사람이 고를 차례인 모듈 3장 */
@@ -165,6 +168,8 @@ export class Battle {
   readonly picked: [string[], string[]] = [[], []];
   offer: ModuleOffer | null = null;
   readonly modulesOn: boolean;
+  /** 이번 판의 변형 규칙 */
+  readonly rule: RuleDef | null;
   private offerIdx = 0;
   private seed: number;
   private modRng: Rng;
@@ -182,6 +187,8 @@ export class Battle {
   constructor(deckA: Deck, deckB: Deck, parts: Part[], seed: number, opts: BattleOptions = {}) {
     this.rng = mulberry32(seed); this.seed = seed; this.modRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     this.modulesOn = !!opts.modules;
+    this.rule = ruleById(opts.rule) ?? null;
+    if (this.rule?.mods) for (const t of [0, 1] as Team[]) addMods(this.mod[t], { id: this.rule.id, name: '', desc: '', cat: 'atk', icon: '', mods: this.rule.mods });
     this.decks = [prepareDeck(deckA, parts), prepareDeck(deckB, parts)];
     this.spawnsByCard = [this.decks[0].map(() => 0), this.decks[1].map(() => 0)];
     this.damageByCard = [this.decks[0].map(() => 0), this.decks[1].map(() => 0)];
@@ -189,7 +196,8 @@ export class Battle {
     this.wattMult = opts.wattMult ?? [1, 1];
     this.survival = !!opts.survival;
     this.towersOn = opts.towers !== false;
-    for (const t of [0, 1] as Team[]) this.towers[t] = Array.from({ length: LANES }, () => ({ hp: TOWER_HP, maxHp: TOWER_HP, cd: 0 }));
+    const th = Math.round(TOWER_HP * (this.rule?.id === 'rl_weak' ? WEAK_TOWER_MULT : 1));
+    for (const t of [0, 1] as Team[]) this.towers[t] = Array.from({ length: LANES }, () => ({ hp: th, maxHp: th, cd: 0 }));
     if (this.survival) { this.matchSec = SURVIVAL_SECONDS; this.maxTicks = SURVIVAL_SECONDS * TICK_HZ; }
     const bd = opts.boss ? bossById(opts.boss) : undefined;
     if (bd) this.boss = { def: bd, spawned: false, unit: null, nextTick: 0 };
@@ -273,7 +281,7 @@ export class Battle {
     // 1. 와트 충전
     const mult = this.overtime ? OVERTIME_MULT : !this.survival && sec >= this.matchSec - 60 ? FINAL_MINUTE_MULT : 1;
     for (const t of [0, 1] as Team[]) {
-      const bonus = (this.controller === t ? POINT_BONUS : 1) * (this.eff.charge[t] > 0 ? 2 : 1) * (1 + this.mod[t].wattRate);
+      const bonus = (this.controller === t ? POINT_BONUS : 1) * (this.eff.charge[t] > 0 ? 2 : 1) * (1 + this.mod[t].wattRate) * (this.rule?.id === 'rl_storm' ? stormMult(sec) : 1);
       watt[t] = Math.min(WATT_POOL, watt[t] + (WATT_PER_SEC * mult * bonus * this.wattMult[t] * (this.survival && t === 1 ? 1 + 0.04 * this.wave : 1)) / TICK_HZ);
     }
 
@@ -527,6 +535,7 @@ export class Battle {
   /** 영웅 출격: 와트 6, 길 지정. 죽은 뒤 40초가 지나야 다시 나갈 수 있다. */
   deployHero(team: Team, lane: number): boolean {
     const h = this.hero[team];
+    if (this.rule?.id === 'rl_nohero') return false;
     if (this.over || !h || h.unit !== null || h.respawn > 0 || lane < 0 || lane >= LANES || this.watt[team] + 1e-9 < HERO_WATT) return false;
     this.watt[team] -= HERO_WATT; this.wattSpent[team] += HERO_WATT; this.heroDeploys[team]++;
     const hm = h.mult * (1 + this.mod[team].hero);
@@ -577,7 +586,7 @@ export class Battle {
     const mine = this.units.filter(u => u.team === t && !u.hero), foes = this.units.filter(u => u.team === opp && !u.hero);
     const byLane = [0, 0, 0]; for (const e of foes) byLane[e.lane]++;
     const avgHp = mine.length ? mine.reduce((a, u) => a + u.hp / u.maxHp, 0) / mine.length : 1;
-    const h = this.hero[t]; let saving = false;
+    const h = this.rule?.id === 'rl_nohero' ? null : this.hero[t]; let saving = false;
     if (h) {
       if (h.unit === null && h.respawn === 0 && mine.length >= 2) {
         if (this.watt[t] >= HERO_WATT) { const lane = byLane.indexOf(Math.max(...byLane)); this.deployHero(t, lane >= 0 ? lane : 1); }

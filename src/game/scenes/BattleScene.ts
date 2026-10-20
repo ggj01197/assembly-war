@@ -285,6 +285,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.ended) return;
     const b = this.cfg.battle, hud = this.cfg.hud, hs = b.hero[0]; if (!hs) return;
     const u = b.heroUnit(0);
+    if (b.rule?.id === 'rl_nohero') { hud.toast('이번 작전은 영웅이 출격할 수 없어요.'); play('deny'); return; }
     if (!u) {
       if (hs.respawn > 0) { hud.toast(`${hs.def.name}: ${Math.ceil(hs.respawn / TICK_HZ)}초 뒤에 다시 출격할 수 있어요.`); play('deny'); return; }
       if (b.watt[0] + 1e-9 < HERO_WATT) { hud.toast(`영웅 출격은 와트 ${HERO_WATT} 이 필요해요.`); play('deny'); return; }
