@@ -1,4 +1,6 @@
 import type { Build } from '../domain/assemble';
+import { mulberry32 } from '../domain/rng';
+import { RULES } from './rules';
 
 /**
  * 작전 데이터 (기획안 FINAL §6 · STAGE5_PLAN 5-D): 1장 훈련 7전투 → 2장 폐허 공장 7전투(공중·수리, 보스 2) → 3장 중앙 요새 7전투(공성·박격포, 보스 1) + 5분 버티기.
@@ -21,6 +23,10 @@ export interface Stage {
   rule?: string;
   /** 요일 작전이면 요일 번호(0=일 … 6=토) */
   op?: number;
+  /** 무한의 탑이면 층 번호(1~) */
+  tower?: number;
+  /** 보스 러시면 몇 번째 보스(1~3) */
+  rush?: 1 | 2 | 3;
 }
 type Raw = Omit<Stage, 'chapter'>;
 
@@ -96,6 +102,42 @@ export function opLevel(clears: Record<string, { clears: number }>): number {
   return done('c3-7') ? 9 : done('c2-7') ? 7 : done('c1-7') ? 5 : 3;
 }
 
+/**
+ * 무한의 탑 (5단계): 층마다 한 판. 다음 층(= 최고 층 + 1)에 도전하고, 이기면 올라간다. 층 구성은 층 번호로만 정해진다(결정론).
+ * 규칙은 3층마다, 보스는 10층마다(모선→요새→장군 순환). 적 레벨·와트는 층이 오를수록 올라 결국 막힌다 — 그게 최고 기록 경쟁.
+ */
+export const TOWER_MAX = 100;
+const TOWER_POOL: Build[] = [biped, trackGat, trackCannon, trackMissile, hoverGat, hoverMissile, flyerSwarm, hoverMedic, hoverHeavyMissile, trackDrone, trackFlak, wheelLaser, trackMortar, fortressCannon, siegeMortar, bladeBiped, laserQuad, lanceTrack];
+const TOWER_BOSSES = ['boss_mother', 'boss_fortress', 'boss_general'];
+export function towerStage(floor: number): Stage {
+  const f = Math.max(1, Math.min(TOWER_MAX, Math.floor(floor)));
+  const rng = mulberry32(f * 7919 + 13), pool = [...TOWER_POOL];
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const n = Math.min(6, 3 + Math.floor(f / 4));
+  const boss = f % 10 === 0 ? TOWER_BOSSES[(f / 10 - 1) % 3] : undefined;
+  const rule = f >= 3 && f % 3 === 0 ? RULES[(f / 3 - 1) % RULES.length].id : undefined;
+  const skills = f >= 15 ? ['sk_overload', 'sk_repair'] : f >= 5 ? ['sk_overload'] : [];
+  return {
+    id: `tower-${f}`, tower: f, no: f, chapter: 3, name: `무한의 탑 ${f}층`,
+    hint: boss ? '보스 층! 정예와 함께 보스가 나옵니다.' : rule ? '이 층에는 특별한 규칙이 있어요. 규칙을 먼저 읽으세요.' : '다음 층으로 올라가세요. 층이 오를수록 적이 강해집니다.',
+    enemy: pool.slice(0, n), enemyLevel: Math.min(20, Math.round(2 + f * 0.5)), enemyWattMult: Math.min(1.5, 0.7 + f * 0.03),
+    rewardOre: 150 + 12 * f, rewardExp: 80 + 6 * f, boss, rule, enemySkills: skills, enemyHero: f >= 20 ? 'hero_vanguard' : undefined,
+  };
+}
+
+/** 보스 러시 (6단계): 모선→요새→장군 3연전. 내 기지 체력이 이어지고(조금 회복), 끝까지 이기면 주 1회 큰 보상. 2장을 끝내면 열린다. */
+export const RUSH: Stage[] = [
+  { id: 'rush-1', rush: 1, no: 1, chapter: 3, name: '보스 러시 1 · 정비 모선', hint: '모선이 8초마다 적 전체를 고칩니다. 집중 공격하세요. 기지 체력은 다음 보스로 이어집니다.', enemy: [hoverMedic, flyerSwarm, hoverGat, trackFlak], enemyLevel: 8, enemyWattMult: 1.0, rewardOre: 260, rewardExp: 130, boss: 'boss_mother' },
+  { id: 'rush-2', rush: 2, no: 2, chapter: 3, name: '보스 러시 2 · 공중 요새', hint: '요새가 12초마다 내 공중 유닛을 쓸어 갑니다. 지상 대공이 열쇠예요.', enemy: [flyerSwarm, hoverHeavyMissile, hoverMedic, trackFlak, wheelLaser], enemyLevel: 8, enemyWattMult: 1.0, rewardOre: 320, rewardExp: 160, boss: 'boss_fortress' },
+  { id: 'rush-3', rush: 3, no: 3, chapter: 3, name: '보스 러시 3 · 요새 장군', hint: '마지막! 박격포 일제가 10초마다 유닛 3기를 때립니다. 접근전으로 끝내세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 6, enemyWattMult: 0.95, rewardOre: 400, rewardExp: 200, boss: 'boss_general' },
+];
+export const RUSH_BONUS = { ore: 800, exp: 400, tickets: 3 };
+/** 그 날이 속한 주의 월요일 날짜(주간 보상 기준) */
+export function weekKey(d: Date = new Date()): string {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+  return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}-${String(m.getDate()).padStart(2, '0')}`;
+}
+
 export const CHAPTERS: { no: 1 | 2 | 3; name: string; stages: Stage[] }[] = [
   { no: 1, name: '훈련소', stages: CH1.map(r => ({ ...r, chapter: 1 as const })) },
   { no: 2, name: '폐허 공장', stages: CH2.map(r => ({ ...r, chapter: 2 as const })) },
@@ -113,14 +155,23 @@ export const SURVIVAL: Stage = {
   enemyLevel: 3, enemyWattMult: 0.5, rewardOre: 500, rewardExp: 260,
 };
 
-export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : s.op !== undefined ? '요일 작전' : `${s.chapter}-${s.no}`);
-export function stageById(id: string): Stage | undefined { return id === SURVIVAL.id ? SURVIVAL : STAGES.find(s => s.id === id) ?? OPS.find(s => s.id === id); }
+export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : s.op !== undefined ? '요일 작전' : s.tower ? '무한의 탑' : s.rush ? '보스 러시' : `${s.chapter}-${s.no}`);
+export function stageById(id: string): Stage | undefined {
+  if (id === SURVIVAL.id) return SURVIVAL;
+  if (id.startsWith('tower-')) { const f = Number(id.slice(6)); return Number.isInteger(f) && f >= 1 && f <= TOWER_MAX ? towerStage(f) : undefined; }
+  return STAGES.find(s => s.id === id) ?? OPS.find(s => s.id === id) ?? RUSH.find(s => s.id === id);
+}
 /** 다음 전투 (3장 끝이면 undefined) */
-export function nextStage(s: Stage): Stage | undefined { const i = STAGES.indexOf(s); return i >= 0 ? STAGES[i + 1] : undefined; }
+export function nextStage(s: Stage): Stage | undefined {
+  if (s.tower) return s.tower < TOWER_MAX ? towerStage(s.tower + 1) : undefined;
+  if (s.rush) return s.rush < 3 ? RUSH[s.rush] : undefined;
+  const i = STAGES.indexOf(s); return i >= 0 ? STAGES[i + 1] : undefined;
+}
 
 type Clears = Record<string, { clears: number }>;
 export function isUnlocked(stage: Stage, clears: Clears): boolean {
-  if (stage.survival || stage.op !== undefined) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
+  if (stage.rush) return (clears[CHAPTERS[1].stages[6].id]?.clears ?? 0) > 0;      // 보스 러시는 2장을 끝내면 열린다
+  if (stage.survival || stage.op !== undefined || stage.tower) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
   const i = STAGES.indexOf(stage);
   if (i <= 0) return i === 0;
   return (clears[STAGES[i - 1].id]?.clears ?? 0) > 0;

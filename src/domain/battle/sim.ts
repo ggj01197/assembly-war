@@ -112,6 +112,8 @@ export interface BattleOptions {
   rule?: string | null;
   /** 클래시 로얄식 손패: 덱을 섞어 4장만 손에 들고, 낸 카드는 맨 뒤로 가며 다음 카드가 그 자리에 들어온다 (기본 끔) */
   hand?: boolean;
+  /** 시작 기지 체력(보스 러시에서 앞 판 체력을 이어 받는다) */
+  startHp?: [number, number];
 }
 
 export const HAND_SIZE = 4;
@@ -196,6 +198,7 @@ export class Battle {
     this.rng = mulberry32(seed); this.seed = seed; this.modRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     this.modulesOn = !!opts.modules;
     this.handOn = !!opts.hand;
+    if (opts.startHp) { this.baseHp[0] = opts.startHp[0]; this.baseHp[1] = opts.startHp[1]; }
     this.rule = ruleById(opts.rule) ?? null;
     if (this.rule?.mods) for (const t of [0, 1] as Team[]) addMods(this.mod[t], { id: this.rule.id, name: '', desc: '', cat: 'atk', icon: '', mods: this.rule.mods });
     this.decks = [prepareDeck(deckA, parts), prepareDeck(deckB, parts)];

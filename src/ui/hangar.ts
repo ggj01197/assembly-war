@@ -1,6 +1,6 @@
 import { assemble, type Build } from '../domain/assemble';
 import { PARTS } from '../data/parts';
-import { CHAPTERS, STAGES, SURVIVAL, OPS, OP_DAILY_CAP, opOfDay, isUnlocked } from '../data/stages';
+import { CHAPTERS, STAGES, SURVIVAL, OPS, RUSH, RUSH_BONUS, OP_DAILY_CAP, TOWER_MAX, opOfDay, towerStage, weekKey, isUnlocked } from '../data/stages';
 import { store, update } from '../game/store';
 import { SKILLS, HEROES, KIND_LABEL, heroById } from '../domain/loadout';
 import { commanderLevel } from '../domain/save';
@@ -130,6 +130,26 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </div>`;
   }
 
+  /** 무한의 탑: 최고 층 + 1 층에 도전 */
+  function towerCard(s: ReturnType<typeof store.getState>['save']): string {
+    const best = s.modes.towerBest, f = Math.min(TOWER_MAX, best + 1), t = towerStage(f), r = ruleById(t.rule);
+    return `<button class="stage tw" data-id="${t.id}" type="button">
+        <i class="no">${f}층</i>
+        <span class="tx"><b>무한의 탑${t.boss ? ' <em>보스</em>' : ''}${r ? ` <em class="rule">${r.icon} ${esc(r.name)}</em>` : ''}</b><small>${esc(t.hint)}${r ? ` <i class="rule-tx">규칙: ${esc(r.desc)}</i>` : ''}</small></span>
+        <span class="rw"><em>${best ? `최고 ${best}층` : '기록 없음'}</em>광석 ${t.rewardOre}</span>
+      </button>`;
+  }
+
+  /** 보스 러시: 3연전, 주 1회 큰 보상 */
+  function rushCard(s: ReturnType<typeof store.getState>['save']): string {
+    const open = isUnlocked(RUSH[0], s.stages), done = s.modes.rushWeek === weekKey() && s.modes.rushDone;
+    return `<button class="stage rush ${open ? '' : 'locked'}" data-id="${RUSH[0].id}" type="button" ${open ? '' : 'disabled'}>
+        <i class="no">☠</i>
+        <span class="tx"><b>보스 러시 <em>보스 3연전</em></b><small>${open ? '모선 → 공중 요새 → 요새 장군. 기지 체력이 이어집니다. 끝까지 이기면 주간 보너스(광석 ' + RUSH_BONUS.ore + ' · 보급권 ' + RUSH_BONUS.tickets + ').' : '2장을 끝내면 열립니다'}</small></span>
+        <span class="rw"><em>${done ? '이번 주 완료' : '이번 주 도전 가능'}</em>최고 ${s.modes.rushBest}/3</span>
+      </button>`;
+  }
+
   /** 도전 탭: 오늘의 요일 작전 */
   function challengeList(s: ReturnType<typeof store.getState>['save']): string {
     const today = todayStr(), op = opOfDay(), done = s.modes.opsDate === today ? s.modes.opsDone : 0, left = Math.max(0, OP_DAILY_CAP - done);
@@ -141,7 +161,8 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         <span class="rw"><em>${left > 0 ? `보상 ${left}/${OP_DAILY_CAP}회` : '보상 완료'}</em>광석 ${op.rewardOre}</span>
       </button>
       <p class="op-week" aria-label="요일 작전 일정">${week}</p>
-      <p class="op-note">하루 ${OP_DAILY_CAP}번 이기면 보상을 전부 받아요(첫 승리는 보급권 2). 그 뒤에도 도전은 가능하고 보상은 20%예요.</p>`;
+      <p class="op-note">하루 ${OP_DAILY_CAP}번 이기면 보상을 전부 받아요(첫 승리는 보급권 2). 그 뒤에도 도전은 가능하고 보상은 20%예요.</p>
+      ${towerCard(s)}${rushCard(s)}`;
   }
 
   /** 작전 선택: 장 탭(1·2·3장·5분 버티기) + 전투 목록 */

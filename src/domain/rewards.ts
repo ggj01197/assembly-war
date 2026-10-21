@@ -51,6 +51,39 @@ export function settleOp(save: SaveData, stage: StageLike, win: boolean, today: 
   return { save: next, rewards };
 }
 
+/** 무한의 탑 정산: 최고 층을 넘기는 승리면 전액(5층마다 보급권 1, 10층마다 2), 이미 깬 층은 20%. 졌을 땐 위로 보상. */
+export function settleTower(save: SaveData, stage: StageLike & { tower?: number }, win: boolean): { save: SaveData; rewards: Settlement; record: boolean } {
+  const next: SaveData = JSON.parse(JSON.stringify(save));
+  const f = stage.tower ?? 0;
+  let rewards: Settlement, record = false;
+  if (win) {
+    record = f > next.modes.towerBest;
+    next.winCount = (next.winCount ?? 0) + 1;
+    rewards = { ore: Math.round(stage.rewardOre * (record ? 1 : 0.2)), exp: Math.round(stage.rewardExp * (record ? 1 : 0.2)), tickets: record ? (f % 10 === 0 ? 2 : f % 5 === 0 ? 1 : 0) : 0, firstClear: record };
+    if (record) next.modes.towerBest = f;
+    next.flags.firstWin = true;
+  } else rewards = { ore: LOSS_ORE, exp: LOSS_EXP, tickets: 0, firstClear: false };
+  next.ore += rewards.ore; next.commanderExp += rewards.exp; next.tickets += rewards.tickets;
+  return { save: next, rewards, record };
+}
+
+/** 보스 러시 정산: 이긴 보스마다 기본 보상, 3번째(마지막)를 이번 주 처음 이기면 주간 보너스. 최고 진행(rushBest)을 남긴다. */
+export function settleRush(save: SaveData, stage: StageLike & { rush?: number }, win: boolean, week: string, bonus: { ore: number; exp: number; tickets: number }): { save: SaveData; rewards: Settlement } {
+  const next: SaveData = JSON.parse(JSON.stringify(save));
+  const m = next.modes, k = stage.rush ?? 1;
+  if (m.rushWeek !== week) { m.rushWeek = week; m.rushDone = false; }
+  let rewards: Settlement;
+  if (win) {
+    next.winCount = (next.winCount ?? 0) + 1;
+    rewards = { ore: stage.rewardOre, exp: stage.rewardExp, tickets: 0, firstClear: false };
+    m.rushBest = Math.max(m.rushBest, k);
+    if (k === 3 && !m.rushDone) { m.rushDone = true; rewards = { ore: rewards.ore + bonus.ore, exp: rewards.exp + bonus.exp, tickets: bonus.tickets, firstClear: true }; }
+    next.flags.firstWin = true;
+  } else rewards = { ore: LOSS_ORE, exp: LOSS_EXP, tickets: 0, firstClear: false };
+  next.ore += rewards.ore; next.commanderExp += rewards.exp; next.tickets += rewards.tickets;
+  return { save: next, rewards };
+}
+
 /** 5분 버티기 정산: 버틴 시간 비율만큼 지급, 최고 기록을 넘기면 전액·아니면 40%. 300초를 처음 채우면 보급권 1. */
 export function settleSurvival(save: SaveData, stage: StageLike, seconds: number, full: boolean): { save: SaveData; rewards: Settlement; record: boolean } {
   const next: SaveData = JSON.parse(JSON.stringify(save));

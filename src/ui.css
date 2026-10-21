@@ -318,3 +318,4 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .op-week span.on { color: #1a1204; background: #ffd36a; border-color: #ffd36a; }
 .op-note { margin: 4px 4px 0; font: 600 12px/1.45 var(--body); color: var(--steel); text-align: center; }
 .stage.op .rw em, .stage.tw .rw em, .stage.rush .rw em { display: block; }
+@media (max-width: 360px) { .ch-tab { padding: 0 8px; } }

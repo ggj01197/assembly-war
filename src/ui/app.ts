@@ -1,8 +1,8 @@
 import type Phaser from 'phaser';
 import { PARTS } from '../data/parts';
-import { stageById, opLevel, OP_DAILY_CAP } from '../data/stages';
+import { stageById, opLevel, OP_DAILY_CAP, RUSH_BONUS, weekKey } from '../data/stages';
 import { Battle, type Deck } from '../domain/battle/sim';
-import { settle, settleSurvival, settleOp } from '../domain/rewards';
+import { settle, settleSurvival, settleOp, settleTower, settleRush } from '../domain/rewards';
 import { store, boot, update, flushSave } from '../game/store';
 import { loadSprites } from '../game/unitLayout';
 import { setSoundEnabled, setHapticsEnabled, playMusic, preloadMusic } from '../native/audio';
@@ -49,6 +49,9 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     screens[name].show(arg);
   }
 
+  /** 보스 러시: 앞 보스를 이긴 뒤 남은 기지 체력 */
+  let rushHp = 1000;
+
   async function startBattle(stageId: string) {
     const stage0 = stageById(stageId); if (!stage0) return;
     const s = store.getState().save;
@@ -60,6 +63,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
       skills: [s.loadout.skills, stage.enemySkills ?? []], heroes: [s.loadout.hero, stage.enemyHero ?? null],
       heroLevel: [commanderLevel(s.commanderExp).level, stage.enemyLevel],
       boss: stage.boss ?? null, survival: !!stage.survival, modules: true, hand: true, rule: stage.rule ?? null,
+      startHp: stage.rush && stage.rush > 1 ? [Math.min(1000, Math.max(400, rushHp) + 250), 1000] : undefined,
     });
     if (current) screens[current].hide();
     current = null;
@@ -73,7 +77,9 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         const win = res.winner === 0;
         const cur = store.getState().save;
         const sv2 = stage.survival ? settleSurvival(cur, stage, res.seconds, win) : null;
-        const settled = sv2 ?? (stage.op !== undefined ? settleOp(cur, stage, win, todayStr(), OP_DAILY_CAP) : settle(cur, stage, win, res.baseHp[0]));
+        if (stage.rush) rushHp = win ? res.baseHp[0] : 1000;
+        const tw = stage.tower ? settleTower(cur, stage, win) : null;
+        const settled = sv2 ?? tw ?? (stage.op !== undefined ? settleOp(cur, stage, win, todayStr(), OP_DAILY_CAP) : stage.rush ? settleRush(cur, stage, win, weekKey(), RUSH_BONUS) : settle(cur, stage, win, res.baseHp[0]));
         // 정산 + 오늘의 임무 진행(승리·생산·처치·포탑·스킬·영웅)
         const commit = () => {
           update(sv => {
@@ -86,7 +92,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
           void flushSave();
         };
         hud.hide();
-        const data: ResultData = { stage, battle: b, builds: s.deck, rewards: settled.rewards, win, quit: false, record: sv2?.record ?? false };
+        const data: ResultData = { stage, battle: b, builds: s.deck, rewards: settled.rewards, win, quit: false, record: sv2?.record ?? tw?.record ?? false };
         // 5분 버티기에서 졌고 이어하기(광고)를 쓸 수 있으면 정산을 미뤄 둔다 — 이어하면 이 정산은 버리고 판이 계속된다
         if (stage.survival && !win && adsSupported() && b.continued < 1 && canWatchAd(store.getState().save, todayStr(), 'survival_continue')) {
           data.commit = commit;

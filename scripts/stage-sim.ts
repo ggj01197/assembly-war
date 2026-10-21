@@ -2,7 +2,7 @@
 //  1장: 시작 덱·레벨 1 / 2장: 기준 덱·강화 4 + 스킬·영웅(봇) / 3장: 기준 덱·강화 7 + 스킬·영웅(봇) / 5분 버티기: 기준 덱·강화 6
 //  목표 곡선: 1장 100→35%, 2장 85→40%, 3장 70→30% (사람은 이보다 잘하므로 봇 승률이 바닥이어도 풀 수 있다)
 import { PARTS } from '../src/data/parts';
-import { STAGES, OPS, SURVIVAL, type Stage } from '../src/data/stages';
+import { STAGES, OPS, RUSH, SURVIVAL, towerStage, type Stage } from '../src/data/stages';
 import { STARTER_DECK } from '../src/domain/save';
 import type { Build } from '../src/domain/assemble';
 import { Battle, SURVIVAL_SECONDS } from '../src/domain/battle/sim';
@@ -18,13 +18,16 @@ const REF: Build[] = [
 const N = Number(process.argv[2] ?? 30), only = process.argv[3] ?? 'all';
 
 function player(st: Stage) {
+  if (st.tower) return st.tower <= 8 ? { cards: REF.map(build => ({ build, level: 4 })), skills: ['sk_bomb', 'sk_repair'], hero: 'hero_vanguard', lv: 4 } : { cards: REF.map(build => ({ build, level: 7 })), skills: ['sk_bomb', 'sk_repair'], hero: 'hero_vanguard', lv: 6 };
   if (st.survival) return { cards: REF.map(build => ({ build, level: 6 })), skills: ['sk_bomb', 'sk_repair'], hero: 'hero_vanguard', lv: 8 };
   if (st.chapter === 1) return { cards: STARTER_DECK.map(build => ({ build })), skills: [], hero: null as string | null, lv: 1 };
   if (st.chapter === 2) return { cards: REF.map(build => ({ build, level: 4 })), skills: ['sk_bomb', 'sk_repair'], hero: 'hero_vanguard', lv: 4 };
   return { cards: REF.map(build => ({ build, level: 7 })), skills: ['sk_bomb', 'sk_repair'], hero: 'hero_vanguard', lv: 6 };
 }
 
-const list = [...STAGES, ...OPS, SURVIVAL].filter(s => only === 'all' || (only === 'sv' ? s.survival : only === 'op' ? s.op !== undefined : String(s.chapter) === only && !s.survival && s.op === undefined));
+const TOWER = [1, 3, 5, 8, 10, 12, 15, 20, 25, 30].map(towerStage);
+const pool = only === 'tw' ? TOWER : only === 'rush' ? RUSH : [...STAGES, ...OPS, SURVIVAL];
+const list = pool.filter(s => only === 'all' || only === 'tw' || only === 'rush' || (only === 'sv' ? s.survival : only === 'op' ? s.op !== undefined : String(s.chapter) === only && !s.survival && s.op === undefined));
 for (const st of list) {
   let win = 0, secs = 0, bossHp = 0;
   for (let k = 0; k < N; k++) {
@@ -39,6 +42,6 @@ for (const st of list) {
     secs += r.seconds;
     void bossHp;
   }
-  const tag = st.survival ? '5분   ' : st.op !== undefined ? `요일${st.op}`.padEnd(6) : `${st.chapter}-${st.no}`.padEnd(6);
+  const tag = st.survival ? '5분   ' : st.op !== undefined ? `요일${st.op}`.padEnd(6) : st.tower ? `${st.tower}층`.padEnd(6) : st.rush ? `러시${st.rush}`.padEnd(6) : `${st.chapter}-${st.no}`.padEnd(6);
   console.log(`${tag} ${st.name.padEnd(9)} 승률 ${String(Math.round(win / N * 100)).padStart(3)}% 평균 ${(secs / N).toFixed(0)}초${st.survival ? ` (목표 ${SURVIVAL_SECONDS}초)` : ''}${st.boss ? ' [보스]' : ''}`);
 }
