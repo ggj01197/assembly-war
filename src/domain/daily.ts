@@ -12,10 +12,28 @@ export const ZERO: Reward = { ore: 0, exp: 0, tickets: 0 };
 export const addReward = (a: Reward, b: Reward): Reward => ({ ore: a.ore + b.ore, exp: a.exp + b.exp, tickets: a.tickets + b.tickets });
 export function grant(save: SaveData, r: Reward): void { save.ore += r.ore; save.commanderExp += r.exp; save.tickets += r.tickets; }
 
-/** 오늘 날짜(기기 시간대) */
-export function todayStr(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const fmt = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * 시계 왕복 방지: 지금까지 본 가장 늦은 날짜(clockMax)를 저장해 두고, 기기 시계를 뒤로 돌려도 그 날짜 밑으로는 내려가지 않는다.
+ * (날짜를 되돌려 일일 임무·출석·광고 한도·주간 과제·시즌 보상을 다시 받는 속임수 차단.) 시계를 앞으로 당기는 것은 서버 없이는 막을 수 없다 — GAME_DEPTH_PLAN 의 한계 참고.
+ */
+let clockFloor = '';
+export const setClockFloor = (d: string): void => { if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d > clockFloor) clockFloor = d; };
+export const resetClockFloor = (): void => { clockFloor = ''; };
+export const getClockFloor = (): string => clockFloor;
+
+/** 오늘 날짜(기기 시간대). 인자를 주면 그 날짜 그대로(테스트·표시용), 안 주면 「시계 바닥」을 지킨 날짜 */
+export function todayStr(d?: Date): string {
+  if (d) return fmt(d);
+  const real = fmt(new Date());
+  if (real > clockFloor) clockFloor = real;
+  return clockFloor;
 }
+/** 시계 바닥을 지킨 오늘 (Date) */
+export function effectiveToday(): Date { const s = todayStr(); return new Date(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10), 12); }
+/** 세이브에 기록할 값: 바닥이 올랐으면 true 를 돌려주고 save.clockMax 를 갱신한다 */
+export function persistClock(save: { clockMax: string }): boolean { todayStr(); if (clockFloor > save.clockMax) { save.clockMax = clockFloor; return true; } return false; }
 const hash = (s: string): number => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 
 // ───────── 일일 임무 ─────────

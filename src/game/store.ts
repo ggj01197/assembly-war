@@ -3,6 +3,7 @@ import { PARTS } from '../data/parts';
 import { defaultSave, repairSave, isSane, type SaveData } from '../domain/save';
 import type { Build } from '../domain/assemble';
 import { getItem, setItem } from '../native/storage';
+import { setClockFloor, persistClock } from '../domain/daily';
 
 /** 세이브 하나를 가진 스토어 (TD-005). 화면은 구독해서 다시 그리고, 저장은 변경 뒤 0.6초 묶어서 한다 (TD-006). */
 const KEY = 'assemblywar.save';
@@ -38,7 +39,9 @@ export async function boot(): Promise<void> {
       await setItem(KEY + '.corrupt', raw);
     }
   }
-  store.setState({ save: repairSave(parsed, ALL_IDS), ready: true });
+  const loaded = repairSave(parsed, ALL_IDS);
+  setClockFloor(loaded.clockMax); persistClock(loaded);   // 시계 되돌리기 방지: 본 가장 늦은 날짜를 이어받는다
+  store.setState({ save: loaded, ready: true });
   window.addEventListener('pagehide', () => { void flushSave(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) void flushSave(); });
 }
@@ -46,6 +49,7 @@ export async function boot(): Promise<void> {
 export function update(fn: (s: SaveData) => void): void {
   const next: SaveData = JSON.parse(JSON.stringify(store.getState().save));
   fn(next);
+  persistClock(next);
   store.setState({ save: next });
   scheduleSave();
 }

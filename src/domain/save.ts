@@ -49,6 +49,8 @@ export interface SaveData {
   /** 시즌 이벤트 포인트·받은 단계 · 쓴 쿠폰(해시) */
   season: SeasonState;
   coupons: string[];
+  /** 지금까지 본 가장 늦은 날짜(시계 되돌리기 방지) */
+  clockMax: string;
 }
 
 export interface ModesState { opsDate: string; opsDone: number; towerBest: number; rushWeek: string; rushDone: boolean; rushBest: number }
@@ -74,7 +76,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
     copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
-    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(), rank: defaultRank(), season: defaultSeason(), coupons: [],
+    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(), rank: defaultRank(), season: defaultSeason(), coupons: [], clockMax: '',
   };
 }
 
@@ -183,6 +185,7 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
     };
   }
   if (Array.isArray((r as { coupons?: unknown }).coupons)) out.coupons = ((r as { coupons: unknown[] }).coupons).filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{8}$/.test(x)).slice(-200);
+  const cm = (r as { clockMax?: unknown }).clockMax; out.clockMax = typeof cm === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cm) && cm < '2100' ? cm : '';
   out.version = SAVE_VERSION;
   return out;
 }

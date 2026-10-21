@@ -1,6 +1,7 @@
 import type { Build } from '../domain/assemble';
 import { mulberry32 } from '../domain/rng';
 import { RULES } from './rules';
+import { effectiveToday } from '../domain/daily';
 import { rankStage } from '../domain/rank';
 
 /**
@@ -105,7 +106,7 @@ export const EVENT_STAGE: Stage = {
   id: 'event', event: true, no: 0, chapter: 3, name: '별빛 방어전', hint: '시즌 이벤트 전투! 와트가 빠르게 찼다 느려집니다. 이기면 시즌 포인트가 많이 쌓여요.',
   enemy: [flyerSwarm, hoverMissile, trackCannon, bladeBiped, trackFlak, laserQuad], enemyLevel: 7, enemyWattMult: 1.1, rewardOre: 500, rewardExp: 250, rule: 'rl_storm', enemySkills: ['sk_overload'],
 };
-export const opOfDay = (d: Date = new Date()): Stage => OPS[d.getDay()];
+export const opOfDay = (d: Date = effectiveToday()): Stage => OPS[d.getDay()];
 /** 요일 작전 적 레벨: 깬 장이 늘수록 올라간다 (1장 4 → 2장 6 → 3장 8) */
 export function opLevel(clears: Record<string, { clears: number }>): number {
   const done = (id: string) => (clears[id]?.clears ?? 0) > 0;
@@ -143,7 +144,7 @@ export const RUSH: Stage[] = [
 ];
 export const RUSH_BONUS = { ore: 800, exp: 400, tickets: 3 };
 /** 그 날이 속한 주의 월요일 날짜(주간 보상 기준) */
-export function weekKey(d: Date = new Date()): string {
+export function weekKey(d: Date = effectiveToday()): string {
   const m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
   return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}-${String(m.getDate()).padStart(2, '0')}`;
 }
