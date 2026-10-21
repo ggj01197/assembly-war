@@ -110,7 +110,11 @@ export interface BattleOptions {
   modules?: boolean;
   /** 작전 변형 규칙 id (data/rules.ts) — 양쪽에 똑같이 적용 */
   rule?: string | null;
+  /** 클래시 로얄식 손패: 덱을 섞어 4장만 손에 들고, 낸 카드는 맨 뒤로 가며 다음 카드가 그 자리에 들어온다 (기본 끔) */
+  hand?: boolean;
 }
+
+export const HAND_SIZE = 4;
 
 /** 사람이 고를 차례인 모듈 3장 */
 export interface ModuleOffer { team: Team; index: number; ids: string[] }
@@ -170,6 +174,10 @@ export class Battle {
   readonly modulesOn: boolean;
   /** 이번 판의 변형 규칙 */
   readonly rule: RuleDef | null;
+  /** 손패(덱 번호 4개)·다음에 들어올 순서(덱 번호) — handOn 일 때만 의미가 있다 */
+  readonly handOn: boolean;
+  readonly hand: [number[], number[]] = [[], []];
+  readonly queue: [number[], number[]] = [[], []];
   private offerIdx = 0;
   private seed: number;
   private modRng: Rng;
@@ -187,6 +195,7 @@ export class Battle {
   constructor(deckA: Deck, deckB: Deck, parts: Part[], seed: number, opts: BattleOptions = {}) {
     this.rng = mulberry32(seed); this.seed = seed; this.modRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     this.modulesOn = !!opts.modules;
+    this.handOn = !!opts.hand;
     this.rule = ruleById(opts.rule) ?? null;
     if (this.rule?.mods) for (const t of [0, 1] as Team[]) addMods(this.mod[t], { id: this.rule.id, name: '', desc: '', cat: 'atk', icon: '', mods: this.rule.mods });
     this.decks = [prepareDeck(deckA, parts), prepareDeck(deckB, parts)];
@@ -201,6 +210,14 @@ export class Battle {
     if (this.survival) { this.matchSec = SURVIVAL_SECONDS; this.maxTicks = SURVIVAL_SECONDS * TICK_HZ; }
     const bd = opts.boss ? bossById(opts.boss) : undefined;
     if (bd) this.boss = { def: bd, spawned: false, unit: null, nextTick: 0 };
+    if (this.handOn) {
+      const hr = mulberry32((seed ^ 0x2c1b3c6d) >>> 0);
+      for (const t of [0, 1] as Team[]) {
+        const order = this.decks[t].map((_, i) => i);
+        for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(hr() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+        this.hand[t] = order.slice(0, HAND_SIZE); this.queue[t] = order.slice(HAND_SIZE);
+      }
+    }
     for (const t of [0, 1] as Team[]) {
       this.skillIds[t] = (opts.skills?.[t] ?? []).filter(id => !!skillById(id)).slice(0, 2);
       this.skillCd[t] = this.skillIds[t].map(() => 0);
@@ -233,6 +250,7 @@ export class Battle {
     if (this.over) return false;
     const card = this.decks[team][cardIdx];
     if (!card || lane < 0 || lane >= LANES) return false;
+    if (this.handOn && !this.hand[team].includes(cardIdx)) return false;
     const cost = this.costOf(team, cardIdx);
     if (cost > this.watt[team] + 1e-9) return false;
     if (this.count(team) >= MAX_UNITS_PER_TEAM) return false;
@@ -243,9 +261,18 @@ export class Battle {
     u.hp = u.maxHp = u.stats.hp;
     this.units.push(u);
     this.spawned[team]++; this.spawnsByCard[team][cardIdx]++;
+    if (this.handOn) this.cycle(team, cardIdx);
     this.pre.push({ type: 'spawn', unit: u.id, team, lane });
     return true;
   }
+
+  /** 낸 카드는 대기열 맨 뒤로, 맨 앞 카드가 그 자리에 들어온다 */
+  private cycle(team: Team, cardIdx: number): void {
+    const k = this.hand[team].indexOf(cardIdx); if (k < 0) return;
+    this.queue[team].push(cardIdx); this.hand[team][k] = this.queue[team].shift()!;
+  }
+  /** 다음에 손으로 들어올 카드(덱 번호) */
+  nextCard(team: Team): number | null { return this.queue[team][0] ?? null; }
 
   /** 한 틱(1/20초) 진행. 끝났으면 false */
   step(): boolean {
@@ -298,11 +325,13 @@ export class Battle {
         const w = (c: Prepared) => (c.stats.target === 'air' ? (enemyAir ? 3 : 0.1) : enemyAir && c.stats.target === 'both' ? 3 : 1);
         let planned = this.plan[t];
         if (planned !== null && this.decks[t][planned].stats.target === 'air' && !enemyAir) planned = null; // 공중 적이 사라졌으면 계획 철회
+        if (planned !== null && this.handOn && !this.hand[t].includes(planned)) planned = null;
         if (planned === null) {
-          const weights = this.decks[t].map(w);
+          const weights: number[] = this.decks[t].map((c, i) => (this.handOn && !this.hand[t].includes(i) ? 0 : w(c)));
+          if (!weights.some(x => x > 0)) weights[this.hand[t][0] ?? 0] = 1;
           let r = rng() * weights.reduce((x, y) => x + y, 0);
           planned = 0;
-          for (let k = 0; k < weights.length; k++) { r -= weights[k]; if (r <= 0) { planned = k; break; } }
+          for (let k = 0; k < weights.length; k++) { r -= weights[k]; if (weights[k] > 0 && r <= 0) { planned = k; break; } }
           this.plan[t] = planned;
         }
         if (this.costOf(t, planned) > watt[t] + 1e-9) continue;

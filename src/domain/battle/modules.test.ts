@@ -95,3 +95,32 @@ describe('지휘 모듈', () => {
     b.baseHp[0] = 1e9; run(b, 140); expect(b.picked[0].length).toBe(3); expect(b.picked[1].length).toBe(0);
   });
 });
+
+describe('클래시식 손패 순환', () => {
+  const d6 = () => ({ cards: [0, 1, 2, 3, 4, 5].map(() => ({ build: biped })) });
+  it('손패는 4장, 나머지는 대기열이고 모든 덱 번호가 한 번씩 있다', () => {
+    const b = new Battle(d6(), d6(), PARTS, 11, { bots: [false, false], hand: true });
+    expect(b.hand[0].length).toBe(4); expect(b.queue[0].length).toBe(2);
+    expect([...b.hand[0], ...b.queue[0]].sort()).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(b.nextCard(0)).toBe(b.queue[0][0]);
+  });
+  it('손에 없는 카드는 못 내고, 낸 카드는 맨 뒤로 가며 다음 카드가 그 자리에 들어온다', () => {
+    const b = new Battle(d6(), d6(), PARTS, 11, { bots: [false, false], hand: true });
+    const out = b.queue[0][0], outTail = b.queue[0][1]; b.watt[0] = 10;
+    expect(b.spawn(0, out, 1)).toBe(false);          // 손에 없다
+    const played = b.hand[0][2]; expect(b.spawn(0, played, 1)).toBe(true);
+    expect(b.hand[0][2]).toBe(out);                  // 같은 자리에 다음 카드
+    expect(b.queue[0]).toEqual([outTail, played]);   // 낸 카드는 맨 뒤
+  });
+  it('같은 시드면 같은 손패, 옵션이 꺼져 있으면 기존대로 6장 다 쓴다', () => {
+    const a = new Battle(d6(), d6(), PARTS, 11, { hand: true }), b = new Battle(d6(), d6(), PARTS, 11, { hand: true });
+    expect(a.hand).toEqual(b.hand);
+    const off = new Battle(d6(), d6(), PARTS, 11, { bots: [false, false] }); off.watt[0] = 10;
+    expect(off.spawn(0, 5, 1)).toBe(true);
+  });
+  it('봇은 손패 안에서만 카드를 내고 끝까지 막히지 않는다', () => {
+    const b = new Battle(d6(), d6(), PARTS, 4, { hand: true });
+    while (b.step()) { /* */ }
+    expect(b.spawned[0]).toBeGreaterThan(8); expect(b.spawned[1]).toBeGreaterThan(8);
+  });
+});

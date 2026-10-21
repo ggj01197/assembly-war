@@ -1,4 +1,5 @@
 import type { Battle, ModuleOffer } from '../domain/battle/sim';
+import type { Build } from '../domain/assemble';
 import { moduleById, CAT_LABEL, type ModuleDef } from '../domain/modules';
 import type { Stage } from '../data/stages';
 import { BASE_HP, WATT_POOL } from '../domain/battle/sim';
@@ -25,7 +26,6 @@ export class BattleHud {
   private offerEl: HTMLElement | null = null; private offerT: ReturnType<typeof setInterval> | null = null;
   private toastT: ReturnType<typeof setTimeout> | null = null;
   private hintT: ReturnType<typeof setTimeout> | null = null;
-  private costs: number[] = [];
   private skillBtns: HTMLButtonElement[] = [];
   private subEl: HTMLElement | null = null; private crownEl: HTMLElement | null = null;
   private heroBtn: HTMLButtonElement | null = null; private heroSkillBtn: HTMLButtonElement | null = null; private heroTx: HTMLElement | null = null;
@@ -37,8 +37,9 @@ export class BattleHud {
   }
 
   setup(stage: Stage, battle: Battle, h: HudHandlers): void {
-    this.costs = battle.decks[0].map(c => c.watt);
-    const cellW = Math.max(26, Math.min(40, Math.floor((window.innerWidth - 20 - 28) / 8) - 6));
+    this.cellW = Math.max(26, Math.min(44, Math.floor((window.innerWidth - 20 - 28) / (battle.handOn ? 7 : 8)) - 6));
+    const slots = battle.handOn ? battle.hand[0] : battle.decks[0].map((_, i) => i);
+    this.handOn = battle.handOn;
     this.el.innerHTML = `
       <header class="bt-top">
         <button class="quit" type="button" aria-label="나가기">나가기</button>
@@ -54,8 +55,9 @@ export class BattleHud {
         <button class="hs" id="btHeroSkill" type="button" aria-label="영웅 기술 ${esc(battle.hero[0]!.def.skill.name)}"><u class="cd"></u><b>${esc(battle.hero[0]!.def.skill.name)}</b></button>
         <button class="hb" id="btHeroBtn" type="button" aria-label="영웅 ${esc(battle.hero[0]!.def.name)}"><u class="cd"></u>${unitFit(battle.hero[0]!.def.build, 40, 46)}<small id="btHeroTx">출격 ${HERO_WATT}</small></button>
       </div>` : ''}</div>
-        <div class="bt-cards">
-          ${battle.decks[0].map((c, i) => `<button class="card" data-i="${i}" type="button" aria-label="${esc(partName(c.build.weapon))} 와트 ${c.watt}">${unitFit(c.build, cellW, 42)}<i class="cost">${c.watt}</i><span class="nm">${esc(partName(c.build.weapon).replace(/^(팔형|탑형|어깨형) /, ''))}</span></button>`).join('')}
+        <div class="bt-cards ${battle.handOn ? 'hand' : ''}">
+          ${battle.handOn ? '<div class="bt-next" aria-label="다음 카드"><small>다음</small><div class="nx" id="btNext"></div></div>' : ''}
+          ${slots.map(i => { const c = battle.decks[0][i]; return `<button class="card" data-i="${i}" data-cost="${c.watt}" type="button" aria-label="${esc(partName(c.build.weapon))} 와트 ${c.watt}">${this.cardInner(c.build, c.watt)}</button>`; }).join('')}
           ${[0, 1].map(slot => { const d = skillById(battle.skillIds[0][slot] ?? ''); return d
             ? `<button class="card skill" data-skill="${slot}" type="button" aria-label="${esc(d.name)} 와트 ${d.watt}"><i class="cost">${d.watt}</i><span class="nm">${esc(d.name)}</span><small>${KIND_LABEL[d.kind]}</small><u class="cd"></u></button>`
             : '<button class="card skill" type="button" disabled><span class="nm">스킬</span><small>비어 있음</small></button>'; }).join('')}
@@ -96,6 +98,9 @@ export class BattleHud {
     this.hintT = setTimeout(() => this.hintEl.classList.add('gone'), 8000);
     this.el.hidden = false;
   }
+
+  private cellW = 36; private handOn = false; private nextIdx: number | null | undefined;
+  private cardInner(build: Build, cost: number): string { return `${unitFit(build, this.cellW, 42)}<i class="cost">${cost}</i><span class="nm">${esc(partName(build.weapon).replace(/^(팔형|탑형|어깨형) /, ''))}</span>`; }
 
   /** 보스 등장 배너: 초상화 + 이름, 2.6초 뒤 사라진다 */
   bossBanner(id: string, name: string, title: string): void {
@@ -154,13 +159,23 @@ export class BattleHud {
     this.wattFill.style.width = `${(w / WATT_POOL) * 100}%`;
     this.wattNum.textContent = String(Math.floor(w));
     this.pointEl.className = 'bt-point' + (b.controller === 0 ? ' mine' : b.controller === 1 ? ' enemy' : '');
-    this.cards.forEach((c, i) => {
+    this.cards.forEach((c, k) => {
+      let i = Number(c.dataset.i);
+      if (this.handOn && b.hand[0][k] !== undefined && b.hand[0][k] !== i) {   // 낸 자리에 다음 카드가 들어온다
+        i = b.hand[0][k]; const d = b.decks[0][i];
+        c.dataset.i = String(i); c.dataset.cost = ''; c.innerHTML = this.cardInner(d.build, d.watt); c.setAttribute('aria-label', `${partName(d.build.weapon)} 와트 ${d.watt}`);
+        c.classList.remove('deal'); void c.offsetWidth; c.classList.add('deal');
+      }
       const cost = b.costOf(0, i);   // 경량화 설계 같은 모듈이 비용을 바꾼다
-      if (this.costs[i] !== cost) { this.costs[i] = cost; const ce = c.querySelector('.cost'); if (ce) ce.textContent = String(cost); c.classList.toggle('cheaper', cost < b.decks[0][i].watt); }
+      if (c.dataset.cost !== String(cost)) { c.dataset.cost = String(cost); const ce = c.querySelector('.cost'); if (ce) ce.textContent = String(cost); c.classList.toggle('cheaper', cost < b.decks[0][i].watt); }
       c.classList.toggle('on', selected === i);
       c.classList.toggle('ready', cost <= w + 1e-9);
       c.classList.toggle('short', cost > w + 1e-9);
     });
+    if (this.handOn) {   // 다음에 들어올 카드 미리보기
+      const nx = b.nextCard(0);
+      if (nx !== this.nextIdx) { this.nextIdx = nx; const el = this.el.querySelector('#btNext'); if (el) el.innerHTML = nx === null ? '' : `${unitFit(b.decks[0][nx].build, 24, 28)}<i>${b.costOf(0, nx)}</i>`; }
+    }
     // 스킬 칸: 쿨다운 가림막 · 와트 부족 · 선택
     this.skillBtns.forEach(c => {
       const slot = Number(c.dataset.skill), d = skillById(b.skillIds[0][slot] ?? ''); if (!d) return;

@@ -300,3 +300,14 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .bt-combo.pop { animation: comboPop 1.4s ease-out both; }
 @keyframes comboPop { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 12% { opacity: 1; transform: translateX(-50%) scale(1.25); } 25% { transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .bt-combo.pop { animation: none; opacity: 1; transform: translateX(-50%); } }
+
+/* 클래시식 손패: 다음 카드 미리보기 + 4장 + 스킬 2 */
+.bt-cards.hand { grid-template-columns: 0.62fr repeat(4, minmax(0, 1fr)) repeat(2, minmax(0, 0.9fr)); gap: 5px; }
+.bt-cards.hand .card { height: 92px; }
+.bt-next { display: grid; place-items: center; align-content: center; gap: 2px; height: 70px; align-self: end; border-radius: 10px; border: 1px dashed var(--line); background: rgba(14,24,40,.7); opacity: .85; }
+.bt-next small { font: 700 10px var(--body); color: var(--steel); }
+.bt-next .nx { position: relative; display: grid; place-items: center; min-height: 30px; transform: scale(.85); }
+.bt-next .nx i { position: absolute; left: -6px; top: -4px; font: 400 12px var(--display); color: var(--bronze); font-style: normal; text-shadow: 0 1px 2px #000; }
+.card.deal { animation: dealIn .28s ease-out both; }
+@keyframes dealIn { 0% { transform: translateY(18px) scale(.85); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .card.deal { animation: none; } }
