@@ -326,3 +326,5 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 @media (max-width: 340px) { .bt-cards.hand { gap: 3px; } .bt-cards.hand .card.skill .nm { font-size: 10px; } }
 .hg-top { flex-wrap: wrap; } .hg-res { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; min-width: 0; margin-left: auto; }
 .hg-res span { padding: 8px 10px; }
+.stage.rk .rw em { display: block; } .stage.rk { border-color: #7a5cff; }
+.rk-box { margin: 14px 4px 8px; } .rk-me { margin: 0 0 8px; font: 700 16px var(--body); } .rk-me small { font: 600 12px var(--body); color: var(--steel); }

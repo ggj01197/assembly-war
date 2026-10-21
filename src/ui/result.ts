@@ -11,7 +11,7 @@ import type { Nav, Screen } from './app';
 import { grant, lossOre } from '../domain/daily';
 import { adAvailable, adLabel, watchForSlot } from './adFlow';
 
-export interface ResultData { stage: Stage; battle: Battle; builds: Build[]; rewards: Settlement; win: boolean; quit: boolean; /** 5분 버티기 최고 기록 갱신 */ record?: boolean;
+export interface ResultData { /** 랭크전 품계 점수 안내 */ note?: string; stage: Stage; battle: Battle; builds: Build[]; rewards: Settlement; win: boolean; quit: boolean; /** 5분 버티기 최고 기록 갱신 */ record?: boolean;
   /** 이어하기(광고)를 기다리는 동안 보류한 정산 — 나갈 때 한 번 실행한다 */ commit?: () => void;
   /** 5분 버티기 이어하기(광고 A5) */ onContinue?: () => void }
 
@@ -40,7 +40,7 @@ export function mountResult(root: HTMLElement, nav: Nav): Screen {
       </section>
       <section class="rs-rewards">
         <span>광석 <b>+${d.rewards.ore}</b></span><span>경험치 <b>+${d.rewards.exp}</b></span>${d.rewards.tickets ? `<span>보급권 <b>+${d.rewards.tickets}</b></span>` : ''}
-        ${d.record ? '<em>최고 기록 갱신!</em>' : d.rewards.firstClear ? '<em>첫 승리 보상!</em>' : ''}
+        ${d.note ? `<em>${esc(d.note)}</em>` : d.record ? '<em>최고 기록 갱신!</em>' : d.rewards.firstClear ? '<em>첫 승리 보상!</em>' : ''}
       </section>
       <section class="rs-cards">
         <h2>설계도별 활약</h2>

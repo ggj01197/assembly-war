@@ -1,6 +1,7 @@
 import type { Build } from '../domain/assemble';
 import { mulberry32 } from '../domain/rng';
 import { RULES } from './rules';
+import { rankStage } from '../domain/rank';
 
 /**
  * 작전 데이터 (기획안 FINAL §6 · STAGE5_PLAN 5-D): 1장 훈련 7전투 → 2장 폐허 공장 7전투(공중·수리, 보스 2) → 3장 중앙 요새 7전투(공성·박격포, 보스 1) + 5분 버티기.
@@ -27,6 +28,8 @@ export interface Stage {
   tower?: number;
   /** 보스 러시면 몇 번째 보스(1~3) */
   rush?: 1 | 2 | 3;
+  /** 랭크전이면 상대(AI 지휘관) 품계·시드·이름 */
+  rank?: { tier: number; seed: number; name: string };
 }
 type Raw = Omit<Stage, 'chapter'>;
 
@@ -155,10 +158,12 @@ export const SURVIVAL: Stage = {
   enemyLevel: 3, enemyWattMult: 0.5, rewardOre: 500, rewardExp: 260,
 };
 
-export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : s.op !== undefined ? '요일 작전' : s.tower ? '무한의 탑' : s.rush ? '보스 러시' : `${s.chapter}-${s.no}`);
+export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : s.op !== undefined ? '요일 작전' : s.tower ? '무한의 탑' : s.rush ? '보스 러시' : s.rank ? '랭크전' : `${s.chapter}-${s.no}`);
 export function stageById(id: string): Stage | undefined {
   if (id === SURVIVAL.id) return SURVIVAL;
   if (id.startsWith('tower-')) { const f = Number(id.slice(6)); return Number.isInteger(f) && f >= 1 && f <= TOWER_MAX ? towerStage(f) : undefined; }
+  const m = /^rank-(\d)-(\d{1,9})$/.exec(id);
+  if (m) return rankStage(Number(m[1]), Number(m[2]));
   return STAGES.find(s => s.id === id) ?? OPS.find(s => s.id === id) ?? RUSH.find(s => s.id === id);
 }
 /** 다음 전투 (3장 끝이면 undefined) */
@@ -171,7 +176,7 @@ export function nextStage(s: Stage): Stage | undefined {
 type Clears = Record<string, { clears: number }>;
 export function isUnlocked(stage: Stage, clears: Clears): boolean {
   if (stage.rush) return (clears[CHAPTERS[1].stages[6].id]?.clears ?? 0) > 0;      // 보스 러시는 2장을 끝내면 열린다
-  if (stage.survival || stage.op !== undefined || stage.tower) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
+  if (stage.survival || stage.op !== undefined || stage.tower || stage.rank) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
   const i = STAGES.indexOf(stage);
   if (i <= 0) return i === 0;
   return (clears[STAGES[i - 1].id]?.clears ?? 0) > 0;

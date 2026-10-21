@@ -2,6 +2,7 @@ import type { Build } from './assemble';
 import { defaultLoadout, repairLoadout, type Loadout } from './loadout';
 import type { DailyState, AttendState, AdState, MissionType, AdSlot } from './daily';
 import { defaultGoals, WEEKLY, ACHIEVEMENTS, type GoalsState } from './goals';
+import { defaultRank, type RankState } from './rank';
 
 /**
  * 세이브 (TD-006): 버전 필드 + 읽을 때마다 고치기(repair). 읽지 못한 세이브는 새 게임이 덮어쓰기 전에 호출 쪽이 격리한다.
@@ -42,6 +43,8 @@ export interface SaveData {
   modes: ModesState;
   /** 주간 과제 진행·업적 받은 기록 */
   goals: GoalsState;
+  /** 랭크전 품계 점수·시즌 */
+  rank: RankState;
 }
 
 export interface ModesState { opsDate: string; opsDone: number; towerBest: number; rushWeek: string; rushDone: boolean; rushBest: number }
@@ -67,7 +70,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
     copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
-    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(),
+    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(), rank: defaultRank(),
   };
 }
 
@@ -157,6 +160,14 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
       claimed: Array.isArray(g.claimed) ? types.filter(t => (g.claimed as unknown[]).includes(t)) : [],
       bonus: !!g.bonus,
       ach: Array.isArray(g.ach) ? ACHIEVEMENTS.map(a => a.id).filter(id => (g.ach as unknown[]).includes(id)) : [],
+    };
+  }
+  if (r.rank && typeof r.rank === 'object') {
+    const k = r.rank as Partial<RankState>, p = k.pending as { ore?: unknown; tickets?: unknown } | null | undefined;
+    out.rank = {
+      rp: Math.floor(num(k.rp, 0, 0, 99999)), best: Math.floor(num(k.best, 0, 0, 5)), week: typeof k.week === 'string' ? k.week : '',
+      seed: Math.floor(num(k.seed, 1, 1, 1e9)), wins: Math.floor(num(k.wins, 0, 0, 99999)), plays: Math.floor(num(k.plays, 0, 0, 99999)),
+      pending: p && typeof p === 'object' ? { ore: Math.floor(num(p.ore, 0, 0, 1e6)), tickets: Math.floor(num(p.tickets, 0, 0, 999)) } : null,
     };
   }
   out.version = SAVE_VERSION;

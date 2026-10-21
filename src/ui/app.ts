@@ -15,6 +15,7 @@ import { commanderLevel } from '../domain/save';
 import { cardLevel } from '../domain/supply';
 import { ensureDaily, addProgress, todayStr, canWatchAd } from '../domain/daily';
 import { addWeekly } from '../domain/goals';
+import { settleRank } from '../domain/rank';
 import { adsSupported, initAds } from '../native/ads';
 
 export interface Screen { el: HTMLElement; show(arg?: unknown): void; hide(): void }
@@ -80,7 +81,8 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         const sv2 = stage.survival ? settleSurvival(cur, stage, res.seconds, win) : null;
         if (stage.rush) rushHp = win ? res.baseHp[0] : 1000;
         const tw = stage.tower ? settleTower(cur, stage, win) : null;
-        const settled = sv2 ?? tw ?? (stage.op !== undefined ? settleOp(cur, stage, win, todayStr(), OP_DAILY_CAP) : stage.rush ? settleRush(cur, stage, win, weekKey(), RUSH_BONUS) : settle(cur, stage, win, res.baseHp[0]));
+        const rk = stage.rank ? settleRank(cur, stage, win, weekKey()) : null;
+        const settled = sv2 ?? tw ?? rk ?? (stage.op !== undefined ? settleOp(cur, stage, win, todayStr(), OP_DAILY_CAP) : stage.rush ? settleRush(cur, stage, win, weekKey(), RUSH_BONUS) : settle(cur, stage, win, res.baseHp[0]));
         // 정산 + 오늘의 임무 진행(승리·생산·처치·포탑·스킬·영웅)
         const commit = () => {
           update(sv => {
@@ -98,7 +100,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
           void flushSave();
         };
         hud.hide();
-        const data: ResultData = { stage, battle: b, builds: s.deck, rewards: settled.rewards, win, quit: false, record: sv2?.record ?? tw?.record ?? false };
+        const data: ResultData = { stage, battle: b, builds: s.deck, rewards: settled.rewards, win, quit: false, record: sv2?.record ?? tw?.record ?? false, note: rk?.note };
         // 5분 버티기에서 졌고 이어하기(광고)를 쓸 수 있으면 정산을 미뤄 둔다 — 이어하면 이 정산은 버리고 판이 계속된다
         if (stage.survival && !win && adsSupported() && b.continued < 1 && canWatchAd(store.getState().save, todayStr(), 'survival_continue')) {
           data.commit = commit;

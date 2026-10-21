@@ -9,6 +9,7 @@ import { levelMultiplier } from '../domain/upgrade';
 import { unitFit, partName, esc, TARGET_LABEL } from './unitView';
 import { play } from '../native/audio';
 import { ruleById } from '../data/rules';
+import { TIERS, tierOf, toNext, opponentTier, rankStage, ensureSeason, claimSeason } from '../domain/rank';
 import type { Nav, Screen } from './app';
 import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
 import { canAttend, missionDone, todayStr } from '../domain/daily';
@@ -83,6 +84,10 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
     };
     el.querySelectorAll<HTMLButtonElement>('.ch-tab:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); chap = b2.dataset.ch === 'sv' ? 'sv' : b2.dataset.ch === 'ch' ? 'ch' : (Number(b2.dataset.ch) as 1 | 2 | 3); render(); });
     (el.querySelector('#hgGear') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'gear'; render(); };
+    (el.querySelector('#rkClaim') as HTMLButtonElement | null)?.addEventListener('click', () => {
+      const r = claimSeason(store.getState().save); if (!r) return;
+      update(sv => { Object.assign(sv, r.save); }); play('packBurst'); toast(`시즌 보상: 광석 +${r.reward.ore}${r.reward.tickets ? ` · 보급권 +${r.reward.tickets}` : ''}`); render();
+    });
     el.querySelectorAll<HTMLButtonElement>('.gear-hero:not(.locked)').forEach(b2 => b2.onclick = () => { play('uiClick'); update(sv => { sv.loadout.hero = b2.dataset.id!; }); render(); });
     el.querySelectorAll<HTMLButtonElement>('.gear-skill:not(.locked)').forEach(b2 => b2.onclick = () => {
       play('uiClick');
@@ -130,6 +135,18 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </div>`;
   }
 
+  /** 랭크전: AI 지휘관과 대전, 품계 점수 */
+  function rankCard(s: ReturnType<typeof store.getState>['save']): string {
+    const k = s.rank, t = tierOf(k.rp), nxt = toNext(k.rp), st = rankStage(opponentTier(t, k.seed), k.seed), ot = TIERS[st.rank!.tier];
+    return `<div class="rk-box"><p class="rk-me"><b>${TIERS[t].icon} ${TIERS[t].name}</b> <small>${k.rp}점${nxt === null ? ' · 최고 품계' : ` · 다음 품계까지 ${nxt}점`} · 이번 주 ${k.wins}승 ${k.plays - k.wins}패</small></p>
+      ${k.pending ? `<button class="btn primary pulse" id="rkClaim" type="button">지난 시즌 보상 받기 (광석 ${k.pending.ore}${k.pending.tickets ? ` · 보급권 ${k.pending.tickets}` : ''})</button>` : ''}</div>
+      <button class="stage rk" data-id="${st.id}" type="button">
+        <i class="no">${ot.icon}</i>
+        <span class="tx"><b>랭크전 <em>AI 지휘관</em></b><small>${esc(st.rank!.name)} · ${ot.name} 품계 · 적 레벨 ${st.enemyLevel}. 서버 없이 AI 가 조종하는 상대예요. 이기면 품계 점수가 오릅니다.</small></span>
+        <span class="rw"><em>대전</em>광석 ${st.rewardOre}</span>
+      </button>`;
+  }
+
   /** 무한의 탑: 최고 층 + 1 층에 도전 */
   function towerCard(s: ReturnType<typeof store.getState>['save']): string {
     const best = s.modes.towerBest, f = Math.min(TOWER_MAX, best + 1), t = towerStage(f), r = ruleById(t.rule);
@@ -162,7 +179,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </button>
       <p class="op-week" aria-label="요일 작전 일정">${week}</p>
       <p class="op-note">하루 ${OP_DAILY_CAP}번 이기면 보상을 전부 받아요(첫 승리는 보급권 2). 그 뒤에도 도전은 가능하고 보상은 20%예요.</p>
-      ${towerCard(s)}${rushCard(s)}`;
+      ${towerCard(s)}${rushCard(s)}${rankCard(s)}`;
   }
 
   /** 작전 선택: 장 탭(1·2·3장·5분 버티기) + 전투 목록 */
@@ -198,7 +215,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
 
   return {
     el,
-    show() { sheet = false; sst.drops = null; sst.extra = false; touchDaily(() => { /* 오늘 임무 뽑기 */ }); el.hidden = false; render(); if (tick) clearInterval(tick); tick = setInterval(() => { if (!el.hidden && sheet === 'supply' && !sst.drops) render(); }, 30000); },
+    show() { sheet = false; sst.drops = null; sst.extra = false; touchDaily(() => { /* 오늘 임무 뽑기 */ }); update(sv => { ensureSeason(sv, weekKey()); }); el.hidden = false; render(); if (tick) clearInterval(tick); tick = setInterval(() => { if (!el.hidden && sheet === 'supply' && !sst.drops) render(); }, 30000); },
     hide() { el.hidden = true; if (tick) { clearInterval(tick); tick = null; } },
   };
 }
