@@ -4,6 +4,8 @@ import { store, update } from '../game/store';
 import { openChest, openFreeChest, extraDrop, freeChestReady, freeChestWaitMs, oddsTable, partsOf, rarityOf, upgradePart, SUPPLY, RARITY_LABEL, type Drop, type Rarity } from '../domain/supply';
 import { MISSION_REWARDS, defOf, missionDone, claimMission, refreshMission, claimAttend, attendReward, attendDay, canAttend, ATTEND_DAYS, salvageCopies, addProgress, todayStr, SALVAGE_RATIO } from '../domain/daily';
 import { adAvailable, adLabel, watchForSlot, touchDaily } from './adFlow';
+import { WEEKLY, WEEKLY_BONUS, ACHIEVEMENTS, weeklyProgress, weeklyDone, weeklyClaimed, bonusReady, claimWeekly, claimWeeklyBonus, achProgress, achDone, achClaimed, claimAch, achClaimable } from '../domain/goals';
+import { weekKey } from '../data/stages';
 import { upgradeCost, levelMultiplier, MAX_LEVEL } from '../domain/upgrade';
 import { accIconUrl, spriteUrl } from '../game/unitLayout';
 import { esc, partName } from './unitView';
@@ -11,7 +13,7 @@ import { play } from '../native/audio';
 
 /** 격납고 시트 4종: 보급(상자) · 강화 · 상점 · 확률표. 화면 이동 없이 격납고 위에 올라온다. */
 export type SheetKind = 'supply' | 'upgrade' | 'shop' | 'odds' | 'missions' | 'attend';
-export interface SheetState { drops: Drop[] | null; upTab: 'legs' | 'body' | 'weapon' | 'accessory'; /** 이번 상자에 한 칸 더(광고)를 썼는가 */ extra: boolean; /** 다음 분해를 100% 로(광고 A7 시청 뒤) */ fullSalvage: boolean }
+export interface SheetState { msTab?: 'daily' | 'weekly' | 'ach'; drops: Drop[] | null; upTab: 'legs' | 'body' | 'weapon' | 'accessory'; /** 이번 상자에 한 칸 더(광고)를 썼는가 */ extra: boolean; /** 다음 분해를 100% 로(광고 A7 시청 뒤) */ fullSalvage: boolean }
 export interface SheetCtx { rerender(): void; toast(msg: string): void; open(k: SheetKind | false): void }
 
 const partImg = (id: string, w = 40) => {
@@ -107,8 +109,46 @@ export function shopHtml(): string {
     </div>`;
 }
 
-export function missionsHtml(): string {
+const rewTx = (r: { ore: number; exp: number; tickets: number }) => `광석 ${r.ore}${r.exp ? ` · 경험치 ${r.exp}` : ''}${r.tickets ? ` · 보급권 ${r.tickets}` : ''}`;
+
+function weeklyRows(): string {
+  const s = store.getState().save, wk = weekKey();
+  const rows = WEEKLY.map(w => {
+    const p = weeklyProgress(s, w.type, wk), done = weeklyDone(s, w, wk), got = weeklyClaimed(s, w.type, wk);
+    return `<div class="ms-row ${got ? 'done' : ''}">
+      <span class="tx"><b>${w.label} (${w.target})</b><i class="bar"><u style="width:${(p / w.target) * 100}%"></u></i><small>${p}/${w.target} · ${rewTx(w.reward)}</small></span>
+      <span class="ms-acts"><button class="btn ${done && !got ? 'primary pulse' : ''} wk-claim" data-t="${w.type}" type="button" ${done && !got ? '' : 'disabled'}>${got ? '받음' : done ? '받기' : '진행 중'}</button></span>
+    </div>`;
+  }).join('');
+  const bonus = bonusReady(s, wk), bGot = s.goals.week === wk && s.goals.bonus;
+  return `${rows}<div class="ms-row ${bGot ? 'done' : ''}"><span class="tx"><b>주간 보너스 — 5개 모두 받기</b><small>${rewTx(WEEKLY_BONUS)}</small></span><span class="ms-acts"><button class="btn ${bonus ? 'primary pulse' : ''}" id="wkBonus" type="button" ${bonus ? '' : 'disabled'}>${bGot ? '받음' : bonus ? '받기' : '잠김'}</button></span></div>`;
+}
+
+function achRows(): string {
+  const s = store.getState().save;
+  const order = [...ACHIEVEMENTS].sort((a, b) => Number(achClaimed(s, a.id)) - Number(achClaimed(s, b.id)) || Number(achDone(s, b)) - Number(achDone(s, a)));
+  return order.map(a => {
+    const p = achProgress(s, a), done = achDone(s, a), got = achClaimed(s, a.id);
+    return `<div class="ms-row ${got ? 'done' : ''}">
+      <span class="tx"><b>${a.icon} ${esc(a.title)}</b><i class="bar"><u style="width:${(p / a.target) * 100}%"></u></i><small>${esc(a.desc)} · ${Math.min(p, a.target)}/${a.target} · ${rewTx(a.reward)}</small></span>
+      <span class="ms-acts"><button class="btn ${done && !got ? 'primary pulse' : ''} ac-claim" data-id="${a.id}" type="button" ${done && !got ? '' : 'disabled'}>${got ? '칭호 ✓' : done ? '받기' : '진행 중'}</button></span>
+    </div>`;
+  }).join('');
+}
+
+export function missionsHtml(tab: 'daily' | 'weekly' | 'ach' = 'daily'): string {
   const s = store.getState().save, d = s.daily;
+  const tabs = `<div class="ch-tabs ms-tabs">${([['daily', '일일'], ['weekly', '주간'], ['ach', `업적${achClaimable(s) ? ' ●' : ''}`]] as const).map(([k, l]) => `<button class="ch-tab ms-tab ${tab === k ? 'on' : ''}" data-k="${k}" type="button">${l}</button>`).join('')}</div>`;
+  if (tab !== 'daily') {
+    return `<div class="sheet-dim"></div>
+    <div class="sheet" role="dialog" aria-label="${tab === 'weekly' ? '주간 과제' : '업적'}">
+      ${head(tab === 'weekly' ? '주간 과제' : `업적 칭호 ${s.goals.ach.length}/${ACHIEVEMENTS.length}`)}
+      ${tabs}
+      <p class="sp-note">${tab === 'weekly' ? '매주 월요일에 새로 시작해요. 완료한 과제는 직접 「받기」를 눌러야 지급되고, 5개를 모두 받으면 주간 보너스가 열립니다.' : '조건을 채우면 칭호와 보상을 받을 수 있어요. 받은 칭호는 계속 남습니다.'}</p>
+      <div class="stage-list">${tab === 'weekly' ? weeklyRows() : achRows()}</div>
+    </div>`;
+  }
+
   const rows = d.missions.map((m, i) => {
     const def = defOf(m.type), r = MISSION_REWARDS[i] ?? MISSION_REWARDS[0], done = missionDone(m);
     const rew = `광석 ${r.ore} · 경험치 ${r.exp}${r.tickets ? ` · 보급권 ${r.tickets}` : ''}`;
@@ -121,6 +161,7 @@ export function missionsHtml(): string {
   return `<div class="sheet-dim"></div>
     <div class="sheet" role="dialog" aria-label="일일 임무">
       ${head('일일 임무')}
+      ${tabs}
       <p class="sp-note">매일 자정(기기 시간)에 새로 바뀌어요. 완료한 임무는 직접 「받기」를 눌러야 지급됩니다. 하루에 임무 1개는 광고로 바꿀 수 있어요.</p>
       <div class="stage-list">${rows || '<p class="sp-tip">임무를 불러오는 중…</p>'}</div>
     </div>`;
@@ -198,6 +239,19 @@ export function bindSheets(el: HTMLElement, kind: SheetKind, st: SheetState, ctx
     const r = await watchForSlot('mission_refresh', sv => { const n = refreshMission(sv, i); if (n) Object.assign(sv, n); });
     if (!r.ok) { play('deny'); ctx.toast(r.msg); return; }
     play('uiClick'); ctx.toast('임무를 바꿨어요.'); ctx.rerender();
+  });
+  on('.ms-tab', b => { play('uiClick'); st.msTab = b.dataset.k as 'daily' | 'weekly' | 'ach'; ctx.rerender(); });
+  on('.wk-claim', b => {
+    const r = claimWeekly(store.getState().save, b.dataset.t as never, weekKey()); if (!r) { play('deny'); return; }
+    update(sv => { Object.assign(sv, r.save); }); play('ready'); ctx.toast(`주간 과제 보상: ${rewTx(r.reward)}`); ctx.rerender();
+  });
+  on('#wkBonus', () => {
+    const r = claimWeeklyBonus(store.getState().save, weekKey()); if (!r) { play('deny'); return; }
+    update(sv => { Object.assign(sv, r.save); }); play('packBurst'); ctx.toast(`주간 보너스! ${rewTx(r.reward)}`); ctx.rerender();
+  });
+  on('.ac-claim', b => {
+    const r = claimAch(store.getState().save, b.dataset.id!); if (!r) { play('deny'); return; }
+    update(sv => { Object.assign(sv, r.save); }); play('packBurst'); ctx.toast(`칭호 「${r.title}」 획득! ${rewTx(r.reward)}`); ctx.rerender();
   });
   on('#atClaim', () => {
     const r = claimAttend(store.getState().save, todayStr()); if (!r) { play('deny'); return; }

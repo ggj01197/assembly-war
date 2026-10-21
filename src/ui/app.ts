@@ -14,6 +14,7 @@ import { BattleHud } from './battleHud';
 import { commanderLevel } from '../domain/save';
 import { cardLevel } from '../domain/supply';
 import { ensureDaily, addProgress, todayStr, canWatchAd } from '../domain/daily';
+import { addWeekly } from '../domain/goals';
 import { adsSupported, initAds } from '../native/ads';
 
 export interface Screen { el: HTMLElement; show(arg?: unknown): void; hide(): void }
@@ -88,6 +89,11 @@ export async function startApp(game: Phaser.Game): Promise<void> {
             if (win) addProgress(sv, 'win', 1);
             addProgress(sv, 'deploy', res.spawned[0]); addProgress(sv, 'kills', res.kills[0]); addProgress(sv, 'towers', res.crowns[0]);
             addProgress(sv, 'skill', res.skillUses[0]); addProgress(sv, 'hero', res.heroDeploys[0]);
+            // 주간 과제
+            const wk = weekKey();
+            if (win) { addWeekly(sv, 'wins', wk); if (stage.op !== undefined) addWeekly(sv, 'ops', wk); if (stage.boss) addWeekly(sv, 'boss', wk); }
+            if (tw?.record) addWeekly(sv, 'tower', wk);
+            addWeekly(sv, 'hero', wk, res.heroDeploys[0]);
           });
           void flushSave();
         };

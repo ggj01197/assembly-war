@@ -1,6 +1,7 @@
 import type { Build } from './assemble';
 import { defaultLoadout, repairLoadout, type Loadout } from './loadout';
 import type { DailyState, AttendState, AdState, MissionType, AdSlot } from './daily';
+import { defaultGoals, WEEKLY, ACHIEVEMENTS, type GoalsState } from './goals';
 
 /**
  * 세이브 (TD-006): 버전 필드 + 읽을 때마다 고치기(repair). 읽지 못한 세이브는 새 게임이 덮어쓰기 전에 호출 쪽이 격리한다.
@@ -39,6 +40,8 @@ export interface SaveData {
   noAds: boolean;
   /** 도전 모드(요일 작전·무한의 탑·보스 러시) 기록: 오늘 보상 받은 횟수·최고 층·이번 주 러시 */
   modes: ModesState;
+  /** 주간 과제 진행·업적 받은 기록 */
+  goals: GoalsState;
 }
 
 export interface ModesState { opsDate: string; opsDone: number; towerBest: number; rushWeek: string; rushDone: boolean; rushBest: number }
@@ -64,7 +67,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
     copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
-    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(),
+    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(),
   };
 }
 
@@ -144,6 +147,17 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
   if (r.modes && typeof r.modes === 'object') {
     const m = r.modes as Partial<ModesState>;
     out.modes = { opsDate: typeof m.opsDate === 'string' ? m.opsDate : '', opsDone: Math.floor(num(m.opsDone, 0, 0, 99)), towerBest: Math.floor(num(m.towerBest, 0, 0, 999)), rushWeek: typeof m.rushWeek === 'string' ? m.rushWeek : '', rushDone: !!m.rushDone, rushBest: Math.floor(num(m.rushBest, 0, 0, 3)) };
+  }
+  if (r.goals && typeof r.goals === 'object') {
+    const g = r.goals as Partial<GoalsState>, prog: GoalsState['prog'] = {};
+    for (const w of WEEKLY) { const v = (g.prog as Record<string, unknown> | undefined)?.[w.type]; if (typeof v === 'number' && Number.isFinite(v) && v > 0) prog[w.type] = Math.min(w.target, Math.floor(v)); }
+    const types = WEEKLY.map(w => w.type);
+    out.goals = {
+      week: typeof g.week === 'string' ? g.week : '', prog,
+      claimed: Array.isArray(g.claimed) ? types.filter(t => (g.claimed as unknown[]).includes(t)) : [],
+      bonus: !!g.bonus,
+      ach: Array.isArray(g.ach) ? ACHIEVEMENTS.map(a => a.id).filter(id => (g.ach as unknown[]).includes(id)) : [],
+    };
   }
   out.version = SAVE_VERSION;
   return out;
