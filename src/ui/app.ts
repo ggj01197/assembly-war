@@ -1,8 +1,8 @@
 import type Phaser from 'phaser';
 import { PARTS } from '../data/parts';
-import { stageById } from '../data/stages';
+import { stageById, opLevel, OP_DAILY_CAP } from '../data/stages';
 import { Battle, type Deck } from '../domain/battle/sim';
-import { settle, settleSurvival } from '../domain/rewards';
+import { settle, settleSurvival, settleOp } from '../domain/rewards';
 import { store, boot, update, flushSave } from '../game/store';
 import { loadSprites } from '../game/unitLayout';
 import { setSoundEnabled, setHapticsEnabled, playMusic, preloadMusic } from '../native/audio';
@@ -50,8 +50,9 @@ export async function startApp(game: Phaser.Game): Promise<void> {
   }
 
   async function startBattle(stageId: string) {
-    const stage = stageById(stageId); if (!stage) return;
+    const stage0 = stageById(stageId); if (!stage0) return;
     const s = store.getState().save;
+    const stage = stage0.op !== undefined ? { ...stage0, enemyLevel: opLevel(s.stages) } : stage0;   // 요일 작전은 진행도에 맞춰 적 레벨이 정해진다
     const player: Deck = { cards: s.deck.map(build => ({ build, level: cardLevel(build, s.partLevels) })) };
     const enemy: Deck = { cards: stage.enemy.map(build => ({ build, level: stage.enemyLevel })) };
     const battle = new Battle(player, enemy, PARTS, (Date.now() & 0x7fffffff) >>> 0, {
@@ -72,7 +73,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         const win = res.winner === 0;
         const cur = store.getState().save;
         const sv2 = stage.survival ? settleSurvival(cur, stage, res.seconds, win) : null;
-        const settled = sv2 ?? settle(cur, stage, win, res.baseHp[0]);
+        const settled = sv2 ?? (stage.op !== undefined ? settleOp(cur, stage, win, todayStr(), OP_DAILY_CAP) : settle(cur, stage, win, res.baseHp[0]));
         // 정산 + 오늘의 임무 진행(승리·생산·처치·포탑·스킬·영웅)
         const commit = () => {
           update(sv => {

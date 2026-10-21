@@ -30,6 +30,27 @@ export function settle(save: SaveData, stage: StageLike, win: boolean, baseHpLef
   return { save: next, rewards };
 }
 
+/** 요일 작전 정산: 하루 `cap` 번까지 승리 보상 전액(+보급권 1, 하루 첫 승리는 +1 더), 그 뒤엔 보상 20%. 졌을 땐 위로 보상만. */
+export function settleOp(save: SaveData, stage: StageLike, win: boolean, today: string, cap: number): { save: SaveData; rewards: Settlement } {
+  const next: SaveData = JSON.parse(JSON.stringify(save));
+  const m = next.modes;
+  if (m.opsDate !== today) { m.opsDate = today; m.opsDone = 0; }
+  let rewards: Settlement;
+  if (win) {
+    const full = m.opsDone < cap;
+    const first = m.opsDone === 0;
+    next.winCount = (next.winCount ?? 0) + 1;
+    rewards = { ore: Math.round(stage.rewardOre * (full ? 1 : 0.2)), exp: Math.round(stage.rewardExp * (full ? 1 : 0.2)), tickets: full ? (first ? 2 : 1) : 0, firstClear: false };
+    if (full) m.opsDone += 1;
+    const rec = next.stages[stage.id] ?? { clears: 0, bestBaseHp: 0 }; rec.clears += 1; next.stages[stage.id] = rec;
+    next.flags.firstWin = true;
+  } else {
+    rewards = { ore: LOSS_ORE, exp: LOSS_EXP, tickets: 0, firstClear: false };
+  }
+  next.ore += rewards.ore; next.commanderExp += rewards.exp; next.tickets += rewards.tickets;
+  return { save: next, rewards };
+}
+
 /** 5분 버티기 정산: 버틴 시간 비율만큼 지급, 최고 기록을 넘기면 전액·아니면 40%. 300초를 처음 채우면 보급권 1. */
 export function settleSurvival(save: SaveData, stage: StageLike, seconds: number, full: boolean): { save: SaveData; rewards: Settlement; record: boolean } {
   const next: SaveData = JSON.parse(JSON.stringify(save));

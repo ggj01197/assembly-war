@@ -37,7 +37,12 @@ export interface SaveData {
   attend: AttendState;
   ads: AdState;
   noAds: boolean;
+  /** 도전 모드(요일 작전·무한의 탑·보스 러시) 기록: 오늘 보상 받은 횟수·최고 층·이번 주 러시 */
+  modes: ModesState;
 }
+
+export interface ModesState { opsDate: string; opsDone: number; towerBest: number; rushWeek: string; rushDone: boolean; rushBest: number }
+export const defaultModes = (): ModesState => ({ opsDate: '', opsDone: 0, towerBest: 0, rushWeek: '', rushDone: false, rushBest: 0 });
 
 export const STARTER_DECK: Build[] = [
   { legs: 'legs_biped_light', body: 'body_arm_scout', weapon: 'wpn_arm_gatling' },
@@ -59,7 +64,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
     copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
-    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false,
+    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(),
   };
 }
 
@@ -136,6 +141,10 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
     out.ads = { date: typeof a.date === 'string' ? a.date : '', used: Math.floor(num(a.used, 0, 0, 99)), bySlot: by };
   }
   out.noAds = !!(r as { noAds?: unknown }).noAds;
+  if (r.modes && typeof r.modes === 'object') {
+    const m = r.modes as Partial<ModesState>;
+    out.modes = { opsDate: typeof m.opsDate === 'string' ? m.opsDate : '', opsDone: Math.floor(num(m.opsDone, 0, 0, 99)), towerBest: Math.floor(num(m.towerBest, 0, 0, 999)), rushWeek: typeof m.rushWeek === 'string' ? m.rushWeek : '', rushDone: !!m.rushDone, rushBest: Math.floor(num(m.rushBest, 0, 0, 3)) };
+  }
   out.version = SAVE_VERSION;
   return out;
 }

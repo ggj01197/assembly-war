@@ -1,6 +1,6 @@
 import { assemble, type Build } from '../domain/assemble';
 import { PARTS } from '../data/parts';
-import { CHAPTERS, STAGES, SURVIVAL, isUnlocked } from '../data/stages';
+import { CHAPTERS, STAGES, SURVIVAL, OPS, OP_DAILY_CAP, opOfDay, isUnlocked } from '../data/stages';
 import { store, update } from '../game/store';
 import { SKILLS, HEROES, KIND_LABEL, heroById } from '../domain/loadout';
 import { commanderLevel } from '../domain/save';
@@ -23,7 +23,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
   const sst: SheetState = { drops: null, upTab: 'legs', extra: false, fullSalvage: false };
   let tick: ReturnType<typeof setInterval> | null = null;
   const toast = (msg: string) => { const t = document.createElement('div'); t.className = 'hg-toast'; t.textContent = msg; el.appendChild(t); setTimeout(() => t.remove(), 1800); };
-  let chap: 1 | 2 | 3 | 'sv' = 1;
+  let chap: 1 | 2 | 3 | 'sv' | 'ch' = 1;
 
   const slotTitle = (b: Build) => partName(b.weapon);
 
@@ -81,7 +81,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       const cur = STAGES.find(st => (store.getState().save.stages[st.id]?.clears ?? 0) === 0 && isUnlocked(st, store.getState().save.stages));
       chap = cur ? cur.chapter : 3; render();
     };
-    el.querySelectorAll<HTMLButtonElement>('.ch-tab:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); chap = b2.dataset.ch === 'sv' ? 'sv' : (Number(b2.dataset.ch) as 1 | 2 | 3); render(); });
+    el.querySelectorAll<HTMLButtonElement>('.ch-tab:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); chap = b2.dataset.ch === 'sv' ? 'sv' : b2.dataset.ch === 'ch' ? 'ch' : (Number(b2.dataset.ch) as 1 | 2 | 3); render(); });
     (el.querySelector('#hgGear') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'gear'; render(); };
     el.querySelectorAll<HTMLButtonElement>('.gear-hero:not(.locked)').forEach(b2 => b2.onclick = () => { play('uiClick'); update(sv => { sv.loadout.hero = b2.dataset.id!; }); render(); });
     el.querySelectorAll<HTMLButtonElement>('.gear-skill:not(.locked)').forEach(b2 => b2.onclick = () => {
@@ -130,6 +130,20 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </div>`;
   }
 
+  /** 도전 탭: 오늘의 요일 작전 */
+  function challengeList(s: ReturnType<typeof store.getState>['save']): string {
+    const today = todayStr(), op = opOfDay(), done = s.modes.opsDate === today ? s.modes.opsDone : 0, left = Math.max(0, OP_DAILY_CAP - done);
+    const r = ruleById(op.rule), DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+    const week = OPS.slice(1).concat(OPS[0]).map(o => `<span class="${o.id === op.id ? 'on' : ''}">${DAYS[o.op!]}</span>`).join('');
+    return `<button class="stage op" data-id="${op.id}" type="button">
+        <i class="no">${DAYS[op.op!]}</i>
+        <span class="tx"><b>${esc(op.name.split(' · ')[1] ?? op.name)}${op.boss ? ' <em>보스</em>' : ''}${r ? ` <em class="rule">${r.icon} ${esc(r.name)}</em>` : ''}</b><small>${esc(op.hint)}${r ? ` <i class="rule-tx">규칙: ${esc(r.desc)}</i>` : ''}</small></span>
+        <span class="rw"><em>${left > 0 ? `보상 ${left}/${OP_DAILY_CAP}회` : '보상 완료'}</em>광석 ${op.rewardOre}</span>
+      </button>
+      <p class="op-week" aria-label="요일 작전 일정">${week}</p>
+      <p class="op-note">하루 ${OP_DAILY_CAP}번 이기면 보상을 전부 받아요(첫 승리는 보급권 2). 그 뒤에도 도전은 가능하고 보상은 20%예요.</p>`;
+  }
+
   /** 작전 선택: 장 탭(1·2·3장·5분 버티기) + 전투 목록 */
   function stageSheet(): string {
     const s = store.getState().save;
@@ -137,8 +151,8 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
     const tabs = `<div class="ch-tabs">${CHAPTERS.map(c => {
       const open = isUnlocked(c.stages[0], s.stages);
       return `<button class="ch-tab ${chap === c.no ? 'on' : ''}" data-ch="${c.no}" type="button" ${open ? '' : 'disabled'}>${c.no}장${open ? '' : ' 🔒'}</button>`;
-    }).join('')}<button class="ch-tab ${chap === 'sv' ? 'on' : ''}" data-ch="sv" type="button" ${isUnlocked(SURVIVAL, s.stages) ? '' : 'disabled'}>5분 버티기${isUnlocked(SURVIVAL, s.stages) ? '' : ' 🔒'}</button></div>`;
-    const list = chap === 'sv'
+    }).join('')}<button class="ch-tab ${chap === 'sv' ? 'on' : ''}" data-ch="sv" type="button" ${isUnlocked(SURVIVAL, s.stages) ? '' : 'disabled'}>5분 버티기${isUnlocked(SURVIVAL, s.stages) ? '' : ' 🔒'}</button><button class="ch-tab ${chap === 'ch' ? 'on' : ''}" data-ch="ch" type="button" ${isUnlocked(OPS[0], s.stages) ? '' : 'disabled'}>도전${isUnlocked(OPS[0], s.stages) ? '' : ' 🔒'}</button></div>`;
+    const list = chap === 'ch' ? challengeList(s) : chap === 'sv'
       ? `<button class="stage" data-id="${SURVIVAL.id}" type="button">
           <i class="no">∞</i>
           <span class="tx"><b>${esc(SURVIVAL.name)}</b><small>${esc(SURVIVAL.hint)}</small></span>
@@ -155,7 +169,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         }).join('');
     return `<div class="sheet-dim"></div>
       <div class="sheet" role="dialog" aria-label="작전 선택">
-        <div class="sheet-head"><b>${chap === 'sv' ? '5분 버티기' : `${chap}장 · ${esc(ch?.name ?? '')}`}</b><button id="sheetClose" type="button" aria-label="닫기">✕</button></div>
+        <div class="sheet-head"><b>${chap === 'sv' ? '5분 버티기' : chap === 'ch' ? '도전 작전' : `${chap}장 · ${esc(ch?.name ?? '')}`}</b><button id="sheetClose" type="button" aria-label="닫기">✕</button></div>
         ${tabs}
         <div class="stage-list">${list}</div>
       </div>`;

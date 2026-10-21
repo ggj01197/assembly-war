@@ -311,3 +311,10 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .card.deal { animation: dealIn .28s ease-out both; }
 @keyframes dealIn { 0% { transform: translateY(18px) scale(.85); opacity: 0; } 100% { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .card.deal { animation: none; } }
+
+/* 도전 탭 */
+.stage.op { border-color: #ffd36a; } .op-week { display: flex; gap: 6px; justify-content: center; margin: 10px 0 4px; }
+.op-week span { min-width: 30px; text-align: center; padding: 4px 0; border-radius: 8px; border: 1px solid var(--line); font: 700 12px var(--body); color: var(--steel); }
+.op-week span.on { color: #1a1204; background: #ffd36a; border-color: #ffd36a; }
+.op-note { margin: 4px 4px 0; font: 600 12px/1.45 var(--body); color: var(--steel); text-align: center; }
+.stage.op .rw em, .stage.tw .rw em, .stage.rush .rw em { display: block; }

@@ -19,6 +19,8 @@ export interface Stage {
   survival?: boolean;
   /** 작전 변형 규칙 id (data/rules.ts) */
   rule?: string;
+  /** 요일 작전이면 요일 번호(0=일 … 6=토) */
+  op?: number;
 }
 type Raw = Omit<Stage, 'chapter'>;
 
@@ -73,6 +75,27 @@ const CH3: Raw[] = [
   { id: 'c3-7', no: 7, name: '요새 장군', hint: '보스: 요새 장군의 박격포 일제가 10초마다 내 유닛 3기를 때립니다. 접근전으로 끝내세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 6, enemyWattMult: 0.95, rewardOre: 700, rewardExp: 420, boss: 'boss_general', enemySkills: ['sk_armor'] },
 ];
 
+/**
+ * 요일 작전 (GAME_DEPTH_PLAN 4단계): 요일마다 다른 규칙·적 편성. 하루 3번까지 보상(OP_DAILY_CAP), 1장을 끝내면 열린다.
+ * 적 레벨은 진행도(깬 장)에 따라 정해진다 — opLevel.
+ */
+export const OP_DAILY_CAP = 3;
+export const OPS: Stage[] = [
+  { id: 'op-0', op: 0, no: 0, chapter: 3, name: '일요일 · 보스 사냥', hint: '주말 특별 작전: 요새 장군이 나옵니다. 보상이 가장 큽니다.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 0.8, rewardOre: 900, rewardExp: 420, boss: 'boss_general', rule: 'rl_guard' },
+  { id: 'op-1', op: 1, no: 0, chapter: 3, name: '월요일 · 공중 습격', hint: '날아다니는 적이 몰려옵니다. 대공 카드가 열쇠예요.', enemy: [flyerSwarm, hoverMissile, hoverGat, hoverHeavyMissile], enemyLevel: 8, enemyWattMult: 1.4, rewardOre: 520, rewardExp: 260, rule: 'rl_fog', enemySkills: ['sk_slow'] },
+  { id: 'op-2', op: 2, no: 0, chapter: 3, name: '화요일 · 중장갑 행군', hint: '단단한 적이 천천히 밀려옵니다. 관통·방어 깎기가 좋습니다.', enemy: [trackCannon, fortressCannon, trackMissile, trackFlak], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 520, rewardExp: 260, rule: 'rl_armor', enemySkills: ['sk_armor'] },
+  { id: 'op-3', op: 3, no: 0, chapter: 3, name: '수요일 · 포격 지대', hint: '박격포가 길을 덮습니다. 포탑이 약해져 있어 왕관을 노리세요.', enemy: [trackMortar, siegeMortar, trackCannon, laserQuad], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 540, rewardExp: 270, rule: 'rl_weak' },
+  { id: 'op-4', op: 4, no: 0, chapter: 3, name: '목요일 · 와트 폭풍', hint: '와트가 빠르게 찼다 느려집니다. 몰아서 내는 타이밍을 잡으세요.', enemy: [biped, hoverGat, trackGat, flyerSwarm, bladeBiped], enemyLevel: 7, enemyWattMult: 1.15, rewardOre: 540, rewardExp: 270, rule: 'rl_storm' },
+  { id: 'op-5', op: 5, no: 0, chapter: 3, name: '금요일 · 근접 난투', hint: '모두 공격이 빨라진 난전! 물러서지 말고 맞붙으세요.', enemy: [bladeBiped, lanceTrack, trackGat, bladeBiped, hoverGat], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 560, rewardExp: 280, rule: 'rl_heat', enemySkills: ['sk_overload'] },
+  { id: 'op-6', op: 6, no: 0, chapter: 3, name: '토요일 · 영웅 봉쇄', hint: '영웅이 출격할 수 없습니다. 카드와 스킬만으로 정예를 꺾으세요.', enemy: [wheelLaser, hoverHeavyMissile, laserQuad, fortressCannon, trackMissile], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 580, rewardExp: 290, rule: 'rl_nohero', enemySkills: ['sk_overload', 'sk_repair'] },
+];
+export const opOfDay = (d: Date = new Date()): Stage => OPS[d.getDay()];
+/** 요일 작전 적 레벨: 깬 장이 늘수록 올라간다 (1장 4 → 2장 6 → 3장 8) */
+export function opLevel(clears: Record<string, { clears: number }>): number {
+  const done = (id: string) => (clears[id]?.clears ?? 0) > 0;
+  return done('c3-7') ? 9 : done('c2-7') ? 7 : done('c1-7') ? 5 : 3;
+}
+
 export const CHAPTERS: { no: 1 | 2 | 3; name: string; stages: Stage[] }[] = [
   { no: 1, name: '훈련소', stages: CH1.map(r => ({ ...r, chapter: 1 as const })) },
   { no: 2, name: '폐허 공장', stages: CH2.map(r => ({ ...r, chapter: 2 as const })) },
@@ -90,14 +113,14 @@ export const SURVIVAL: Stage = {
   enemyLevel: 3, enemyWattMult: 0.5, rewardOre: 500, rewardExp: 260,
 };
 
-export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : `${s.chapter}-${s.no}`);
-export function stageById(id: string): Stage | undefined { return id === SURVIVAL.id ? SURVIVAL : STAGES.find(s => s.id === id); }
+export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : s.op !== undefined ? '요일 작전' : `${s.chapter}-${s.no}`);
+export function stageById(id: string): Stage | undefined { return id === SURVIVAL.id ? SURVIVAL : STAGES.find(s => s.id === id) ?? OPS.find(s => s.id === id); }
 /** 다음 전투 (3장 끝이면 undefined) */
 export function nextStage(s: Stage): Stage | undefined { const i = STAGES.indexOf(s); return i >= 0 ? STAGES[i + 1] : undefined; }
 
 type Clears = Record<string, { clears: number }>;
 export function isUnlocked(stage: Stage, clears: Clears): boolean {
-  if (stage.survival) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
+  if (stage.survival || stage.op !== undefined) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
   const i = STAGES.indexOf(stage);
   if (i <= 0) return i === 0;
   return (clears[STAGES[i - 1].id]?.clears ?? 0) > 0;
