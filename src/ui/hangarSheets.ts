@@ -5,14 +5,16 @@ import { openChest, openFreeChest, extraDrop, freeChestReady, freeChestWaitMs, o
 import { MISSION_REWARDS, defOf, missionDone, claimMission, refreshMission, claimAttend, attendReward, attendDay, canAttend, ATTEND_DAYS, salvageCopies, addProgress, todayStr, SALVAGE_RATIO } from '../domain/daily';
 import { adAvailable, adLabel, watchForSlot, touchDaily } from './adFlow';
 import { WEEKLY, WEEKLY_BONUS, ACHIEVEMENTS, weeklyProgress, weeklyDone, weeklyClaimed, bonusReady, claimWeekly, claimWeeklyBonus, achProgress, achDone, achClaimed, claimAch, achClaimable } from '../domain/goals';
-import { weekKey } from '../data/stages';
+import { weekKey, EVENT_STAGE } from '../data/stages';
+import { activeSeason, upcomingSeason, daysLeft, daysBetween, claimMilestone, milestoneReady, EVENT_DAILY_CAP, SEASON_DAILY_POINT_CAP } from '../domain/season';
+import { redeemCoupon } from '../domain/coupons';
 import { upgradeCost, levelMultiplier, MAX_LEVEL } from '../domain/upgrade';
 import { accIconUrl, spriteUrl } from '../game/unitLayout';
 import { esc, partName } from './unitView';
 import { play } from '../native/audio';
 
 /** 격납고 시트 4종: 보급(상자) · 강화 · 상점 · 확률표. 화면 이동 없이 격납고 위에 올라온다. */
-export type SheetKind = 'supply' | 'upgrade' | 'shop' | 'odds' | 'missions' | 'attend';
+export type SheetKind = 'supply' | 'upgrade' | 'shop' | 'odds' | 'missions' | 'attend' | 'season';
 export interface SheetState { msTab?: 'daily' | 'weekly' | 'ach'; drops: Drop[] | null; upTab: 'legs' | 'body' | 'weapon' | 'accessory'; /** 이번 상자에 한 칸 더(광고)를 썼는가 */ extra: boolean; /** 다음 분해를 100% 로(광고 A7 시청 뒤) */ fullSalvage: boolean }
 export interface SheetCtx { rerender(): void; toast(msg: string): void; open(k: SheetKind | false): void }
 
@@ -104,6 +106,7 @@ export function shopHtml(): string {
   return `<div class="sheet-dim"></div>
     <div class="sheet" role="dialog" aria-label="상점">
       ${head('상점')}
+      <div class="cp-box"><label for="cpCode">쿠폰 코드</label><div class="cp-row"><input id="cpCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" maxlength="40" placeholder="코드를 입력하세요"><button class="btn primary" id="cpGo" type="button">받기</button></div><p class="cp-msg" id="cpMsg" role="status"></p></div>
       <p class="sp-note shop-note">테스트 빌드에서는 결제가 열리지 않아요. 출시 때 같은 목록으로 열립니다. 능력치를 파는 상품은 없고, 유료 상자도 없습니다.</p>
       <div class="stage-list">${groups}</div>
     </div>`;
@@ -164,6 +167,31 @@ export function missionsHtml(tab: 'daily' | 'weekly' | 'ach' = 'daily'): string 
       ${tabs}
       <p class="sp-note">매일 자정(기기 시간)에 새로 바뀌어요. 완료한 임무는 직접 「받기」를 눌러야 지급됩니다. 하루에 임무 1개는 광고로 바꿀 수 있어요.</p>
       <div class="stage-list">${rows || '<p class="sp-tip">임무를 불러오는 중…</p>'}</div>
+    </div>`;
+}
+
+/** 시즌 이벤트 시트 */
+export function seasonHtml(): string {
+  const s = store.getState().save, today = todayStr(), def = activeSeason(today);
+  if (!def) {
+    const up = upcomingSeason(today);
+    return `<div class="sheet-dim"></div><div class="sheet" role="dialog" aria-label="시즌 이벤트">${head('시즌 이벤트')}
+      <p class="sp-note">${up ? `${up.icon} 「${esc(up.name)}」이 ${up.start.slice(5, 7)}월 ${up.start.slice(8)}일에 시작해요 (${daysBetween(today, up.start)}일 뒤).` : '지금은 열린 시즌이 없어요. 다음 시즌을 준비 중입니다.'}</p></div>`;
+  }
+  const st = s.season.id === def.id ? s.season : { points: 0, claimed: [] as number[], evDate: '', evDone: 0 };
+  const evLeft = Math.max(0, EVENT_DAILY_CAP - (st.evDate === today ? st.evDone : 0));
+  const rows = def.milestones.map((m, i) => {
+    const ready = milestoneReady(s, def, i), got = st.claimed.includes(i), pct = Math.min(100, (st.points / m.pts) * 100);
+    return `<div class="ms-row ${got ? 'done' : ''}"><span class="tx"><b>${m.pts}점</b><i class="bar"><u style="width:${pct}%"></u></i><small>${rewTx(m.reward)}${m.copies ? ' · 에픽 부품 조각 ×' + m.copies.n : ''} · <i class="pass-lock">🔒 성장 패스 +광석 ${def.passBonus.ore}</i></small></span>
+      <span class="ms-acts"><button class="btn ${ready ? 'primary pulse' : ''} se-claim" data-i="${i}" type="button" ${ready ? '' : 'disabled'}>${got ? '받음' : ready ? '받기' : '잠김'}</button></span></div>`;
+  }).join('');
+  return `<div class="sheet-dim"></div>
+    <div class="sheet" role="dialog" aria-label="시즌 이벤트">
+      ${head(`${def.icon} ${esc(def.name)}`)}
+      <p class="sp-note">${esc(def.blurb)} 시즌 포인트 <b>${st.points}</b>점 · ${daysLeft(def, today)}일 남음 · 하루 최대 ${SEASON_DAILY_POINT_CAP}점</p>
+      <button class="stage ev" data-id="${EVENT_STAGE.id}" type="button"><i class="no">⭐</i><span class="tx"><b>${EVENT_STAGE.name} <em class="rule">🌩 와트 폭풍</em></b><small>${esc(EVENT_STAGE.hint)}</small></span><span class="rw"><em>오늘 ${evLeft}/${EVENT_DAILY_CAP}회</em>광석 ${EVENT_STAGE.rewardOre}</span></button>
+      <div class="stage-list">${rows}</div>
+      <p class="sp-note">성장 패스(유료 보상 줄)는 출시 빌드에서 열려요. 지금은 무료 보상만 받을 수 있고, 패스가 없어도 무료 보상은 그대로입니다.</p>
     </div>`;
 }
 
@@ -239,6 +267,16 @@ export function bindSheets(el: HTMLElement, kind: SheetKind, st: SheetState, ctx
     const r = await watchForSlot('mission_refresh', sv => { const n = refreshMission(sv, i); if (n) Object.assign(sv, n); });
     if (!r.ok) { play('deny'); ctx.toast(r.msg); return; }
     play('uiClick'); ctx.toast('임무를 바꿨어요.'); ctx.rerender();
+  });
+  on('.se-claim', b => {
+    const epics = partsOf('epic'), r = claimMilestone(store.getState().save, todayStr(), Number(b.dataset.i), epics[epics.length - 1].id); if (!r) { play('deny'); return; }
+    update(sv => { Object.assign(sv, r.save); }); play('packBurst'); ctx.toast(`시즌 보상: ${rewTx(r.reward)}${r.copies ? ' · 에픽 부품 조각' : ''}`); ctx.rerender();
+  });
+  on('#cpGo', () => {
+    const inp = el.querySelector('#cpCode') as HTMLInputElement | null, msg = el.querySelector('#cpMsg') as HTMLElement | null; if (!inp) return;
+    const r = redeemCoupon(store.getState().save, inp.value, todayStr());
+    if (!r.ok) { play('deny'); if (msg) { msg.textContent = r.msg; msg.className = 'cp-msg bad'; } return; }
+    update(sv => { Object.assign(sv, r.save); }); play('packBurst'); ctx.toast(`쿠폰 「${r.label}」: ${rewTx(r.reward)}`); ctx.rerender();
   });
   on('.ms-tab', b => { play('uiClick'); st.msTab = b.dataset.k as 'daily' | 'weekly' | 'ach'; ctx.rerender(); });
   on('.wk-claim', b => {

@@ -9,9 +9,10 @@ import { levelMultiplier } from '../domain/upgrade';
 import { unitFit, partName, esc, TARGET_LABEL } from './unitView';
 import { play } from '../native/audio';
 import { ruleById } from '../data/rules';
+import { activeSeason, upcomingSeason, daysLeft } from '../domain/season';
 import { TIERS, tierOf, toNext, opponentTier, rankStage, ensureSeason, claimSeason } from '../domain/rank';
 import type { Nav, Screen } from './app';
-import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
+import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, seasonHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
 import { canAttend, missionDone, todayStr } from '../domain/daily';
 import { touchDaily } from './adFlow';
 
@@ -72,7 +73,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         <button class="btn primary big ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button">출격</button>
       </footer>
       ${guideAssemble ? '<div class="hg-tip">첫 승리! 설계도를 바꿔 더 강해져 보세요.</div>' : ''}
-      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml(sst.msTab ?? 'daily') : sheet === 'attend' ? attendHtml() : ''}`;
+      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml(sst.msTab ?? 'daily') : sheet === 'attend' ? attendHtml() : sheet === 'season' ? seasonHtml() : ''}`;
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });
     (el.querySelector('#hgAssemble') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openAssembly(sel); };
@@ -84,6 +85,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
     };
     el.querySelectorAll<HTMLButtonElement>('.ch-tab:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); chap = b2.dataset.ch === 'sv' ? 'sv' : b2.dataset.ch === 'ch' ? 'ch' : (Number(b2.dataset.ch) as 1 | 2 | 3); render(); });
     (el.querySelector('#hgGear') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'gear'; render(); };
+    (el.querySelector('#openSeason') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiClick'); sheet = 'season'; render(); });
     (el.querySelector('#rkClaim') as HTMLButtonElement | null)?.addEventListener('click', () => {
       const r = claimSeason(store.getState().save); if (!r) return;
       update(sv => { Object.assign(sv, r.save); }); play('packBurst'); toast(`시즌 보상: 광석 +${r.reward.ore}${r.reward.tickets ? ` · 보급권 +${r.reward.tickets}` : ''}`); render();
@@ -101,10 +103,10 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
     for (const [id, k] of [['#nvMissions', 'missions'], ['#nvAttend', 'attend'], ['#nvSupply', 'supply'], ['#nvUpgrade', 'upgrade'], ['#nvShop', 'shop']] as const) {
       (el.querySelector(id) as HTMLButtonElement).onclick = () => { play('uiClick'); sst.drops = null; sheet = k; render(); };
     }
-    if (sheet === 'supply' || sheet === 'odds' || sheet === 'upgrade' || sheet === 'shop' || sheet === 'missions' || sheet === 'attend') bindSheets(el, sheet, sst, { rerender: render, toast, open: k => { sheet = k; render(); } });
+    if (sheet === 'supply' || sheet === 'odds' || sheet === 'upgrade' || sheet === 'shop' || sheet === 'missions' || sheet === 'attend' || sheet === 'season') bindSheets(el, sheet, sst, { rerender: render, toast, open: k => { sheet = k; render(); } });
     el.querySelector('#sheetClose')?.addEventListener('click', () => { play('uiBack'); sheet = false; sst.drops = null; render(); });
     el.querySelector('.sheet-dim')?.addEventListener('click', () => { sheet = false; render(); });
-    el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked):not(.gear-hero):not(.gear-skill)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
+    el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked):not(.gear-hero):not(.gear-skill):not(#openSeason)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
   }
 
   /** 출격 장비: 영웅 1명 + 스킬 2개. 사령관 레벨이 올라야 열리는 것이 있다. */
@@ -133,6 +135,16 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         </div>
         <p class="gear-note">${esc(heroById(lo.hero)?.name ?? '')} 출격 · 스킬 ${lo.skills.length}/2 — 전투 중 카드 줄의 보라색 칸이 스킬, 와트 줄 오른쪽의 금색 버튼이 영웅입니다.</p>
       </div>`;
+  }
+
+  /** 시즌 이벤트 카드: 열린 시즌이 있으면 포인트·남은 일수, 없으면 다음 시즌 안내 */
+  function seasonCard(s: ReturnType<typeof store.getState>['save']): string {
+    const today = todayStr(), def = activeSeason(today), up = upcomingSeason(today);
+    if (!def && !up) return '';
+    const pts = def && s.season.id === def.id ? s.season.points : 0;
+    return `<button class="stage se ${def ? '' : 'idle'}" id="openSeason" type="button"><i class="no">${(def ?? up)!.icon}</i>
+      <span class="tx"><b>${esc((def ?? up)!.name)} <em class="rule">시즌 이벤트</em></b><small>${def ? `시즌 포인트 ${pts}점 · ${daysLeft(def, today)}일 남음. 보상과 별빛 방어전이 열려 있어요.` : `${up!.start.slice(5, 7)}월 ${up!.start.slice(8)}일에 시작해요.`}</small></span>
+      <span class="rw"><em>${def ? '열림' : '준비 중'}</em></span></button>`;
   }
 
   /** 랭크전: AI 지휘관과 대전, 품계 점수 */
@@ -179,7 +191,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </button>
       <p class="op-week" aria-label="요일 작전 일정">${week}</p>
       <p class="op-note">하루 ${OP_DAILY_CAP}번 이기면 보상을 전부 받아요(첫 승리는 보급권 2). 그 뒤에도 도전은 가능하고 보상은 20%예요.</p>
-      ${towerCard(s)}${rushCard(s)}${rankCard(s)}`;
+      ${seasonCard(s)}${towerCard(s)}${rushCard(s)}${rankCard(s)}`;
   }
 
   /** 작전 선택: 장 탭(1·2·3장·5분 버티기) + 전투 목록 */

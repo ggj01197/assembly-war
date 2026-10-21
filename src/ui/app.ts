@@ -16,6 +16,7 @@ import { cardLevel } from '../domain/supply';
 import { ensureDaily, addProgress, todayStr, canWatchAd } from '../domain/daily';
 import { addWeekly } from '../domain/goals';
 import { settleRank } from '../domain/rank';
+import { activeSeason, addSeasonPoints, battlePoints, settleEvent, EVENT_WIN_POINTS } from '../domain/season';
 import { adsSupported, initAds } from '../native/ads';
 
 export interface Screen { el: HTMLElement; show(arg?: unknown): void; hide(): void }
@@ -56,8 +57,9 @@ export async function startApp(game: Phaser.Game): Promise<void> {
 
   async function startBattle(stageId: string) {
     const stage0 = stageById(stageId); if (!stage0) return;
+    if (stage0.event && !activeSeason(todayStr())) return;   // 시즌이 열려 있을 때만
     const s = store.getState().save;
-    const stage = stage0.op !== undefined ? { ...stage0, enemyLevel: opLevel(s.stages) } : stage0;   // 요일 작전은 진행도에 맞춰 적 레벨이 정해진다
+    const stage = stage0.op !== undefined || stage0.event ? { ...stage0, enemyLevel: opLevel(s.stages) } : stage0;   // 요일 작전은 진행도에 맞춰 적 레벨이 정해진다
     const player: Deck = { cards: s.deck.map(build => ({ build, level: cardLevel(build, s.partLevels) })) };
     const enemy: Deck = { cards: stage.enemy.map(build => ({ build, level: stage.enemyLevel })) };
     const battle = new Battle(player, enemy, PARTS, (Date.now() & 0x7fffffff) >>> 0, {
@@ -82,7 +84,8 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         if (stage.rush) rushHp = win ? res.baseHp[0] : 1000;
         const tw = stage.tower ? settleTower(cur, stage, win) : null;
         const rk = stage.rank ? settleRank(cur, stage, win, weekKey()) : null;
-        const settled = sv2 ?? tw ?? rk ?? (stage.op !== undefined ? settleOp(cur, stage, win, todayStr(), OP_DAILY_CAP) : stage.rush ? settleRush(cur, stage, win, weekKey(), RUSH_BONUS) : settle(cur, stage, win, res.baseHp[0]));
+        const ev = stage.event ? settleEvent(cur, stage, win, todayStr()) : null;
+        const settled = sv2 ?? tw ?? rk ?? ev ?? (stage.op !== undefined ? settleOp(cur, stage, win, todayStr(), OP_DAILY_CAP) : stage.rush ? settleRush(cur, stage, win, weekKey(), RUSH_BONUS) : settle(cur, stage, win, res.baseHp[0]));
         // 정산 + 오늘의 임무 진행(승리·생산·처치·포탑·스킬·영웅)
         const commit = () => {
           update(sv => {
@@ -95,6 +98,8 @@ export async function startApp(game: Phaser.Game): Promise<void> {
             const wk = weekKey();
             if (win) { addWeekly(sv, 'wins', wk); if (stage.op !== undefined) addWeekly(sv, 'ops', wk); if (stage.boss) addWeekly(sv, 'boss', wk); }
             if (tw?.record) addWeekly(sv, 'tower', wk);
+            // 시즌 포인트: 승리 10(패배 2) + 모드 보너스(요일·탑 새 층·러시 마지막·랭크 승리·보스 5, 별빛 방어전 25)
+            addSeasonPoints(sv, todayStr(), battlePoints(win, (stage.op !== undefined ? 5 : 0) + (tw?.record ? 5 : 0) + (stage.rush === 3 ? 15 : 0) + (stage.rank ? 5 : 0) + (stage.boss ? 5 : 0) + (stage.event && ev?.full ? EVENT_WIN_POINTS : 0)));
             addWeekly(sv, 'hero', wk, res.heroDeploys[0]);
           });
           void flushSave();

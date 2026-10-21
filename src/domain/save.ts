@@ -3,6 +3,7 @@ import { defaultLoadout, repairLoadout, type Loadout } from './loadout';
 import type { DailyState, AttendState, AdState, MissionType, AdSlot } from './daily';
 import { defaultGoals, WEEKLY, ACHIEVEMENTS, type GoalsState } from './goals';
 import { defaultRank, type RankState } from './rank';
+import { defaultSeason, type SeasonState } from './season';
 
 /**
  * 세이브 (TD-006): 버전 필드 + 읽을 때마다 고치기(repair). 읽지 못한 세이브는 새 게임이 덮어쓰기 전에 호출 쪽이 격리한다.
@@ -45,6 +46,9 @@ export interface SaveData {
   goals: GoalsState;
   /** 랭크전 품계 점수·시즌 */
   rank: RankState;
+  /** 시즌 이벤트 포인트·받은 단계 · 쓴 쿠폰(해시) */
+  season: SeasonState;
+  coupons: string[];
 }
 
 export interface ModesState { opsDate: string; opsDone: number; towerBest: number; rushWeek: string; rushDone: boolean; rushBest: number }
@@ -70,7 +74,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
     copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
-    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(), rank: defaultRank(),
+    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(), rank: defaultRank(), season: defaultSeason(), coupons: [],
   };
 }
 
@@ -170,6 +174,15 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
       pending: p && typeof p === 'object' ? { ore: Math.floor(num(p.ore, 0, 0, 1e6)), tickets: Math.floor(num(p.tickets, 0, 0, 999)) } : null,
     };
   }
+  if (r.season && typeof r.season === 'object') {
+    const q = r.season as Partial<SeasonState>;
+    out.season = {
+      id: typeof q.id === 'string' ? q.id.slice(0, 20) : '', points: Math.floor(num(q.points, 0, 0, 99999)),
+      claimed: Array.isArray(q.claimed) ? [...new Set((q.claimed as unknown[]).filter((x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x < 20))] : [],
+      ptsDate: typeof q.ptsDate === 'string' ? q.ptsDate : '', ptsToday: Math.floor(num(q.ptsToday, 0, 0, 9999)), evDate: typeof q.evDate === 'string' ? q.evDate : '', evDone: Math.floor(num(q.evDone, 0, 0, 99)),
+    };
+  }
+  if (Array.isArray((r as { coupons?: unknown }).coupons)) out.coupons = ((r as { coupons: unknown[] }).coupons).filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{8}$/.test(x)).slice(-200);
   out.version = SAVE_VERSION;
   return out;
 }

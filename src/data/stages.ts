@@ -30,6 +30,8 @@ export interface Stage {
   rush?: 1 | 2 | 3;
   /** 랭크전이면 상대(AI 지휘관) 품계·시드·이름 */
   rank?: { tier: number; seed: number; name: string };
+  /** 시즌 이벤트 전투(별빛 방어전) */
+  event?: boolean;
 }
 type Raw = Omit<Stage, 'chapter'>;
 
@@ -98,6 +100,11 @@ export const OPS: Stage[] = [
   { id: 'op-5', op: 5, no: 0, chapter: 3, name: '금요일 · 근접 난투', hint: '모두 공격이 빨라진 난전! 물러서지 말고 맞붙으세요.', enemy: [bladeBiped, lanceTrack, trackGat, bladeBiped, hoverGat], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 560, rewardExp: 280, rule: 'rl_heat', enemySkills: ['sk_overload'] },
   { id: 'op-6', op: 6, no: 0, chapter: 3, name: '토요일 · 영웅 봉쇄', hint: '영웅이 출격할 수 없습니다. 카드와 스킬만으로 정예를 꺾으세요.', enemy: [wheelLaser, hoverHeavyMissile, laserQuad, fortressCannon, trackMissile], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 580, rewardExp: 290, rule: 'rl_nohero', enemySkills: ['sk_overload', 'sk_repair'] },
 ];
+/** 시즌 이벤트 전투 「별빛 방어전」: 시즌이 열려 있을 때만, 하루 3번 보상·시즌 포인트가 많다. 적 레벨은 요일 작전과 같이 진행도를 따른다. */
+export const EVENT_STAGE: Stage = {
+  id: 'event', event: true, no: 0, chapter: 3, name: '별빛 방어전', hint: '시즌 이벤트 전투! 와트가 빠르게 찼다 느려집니다. 이기면 시즌 포인트가 많이 쌓여요.',
+  enemy: [flyerSwarm, hoverMissile, trackCannon, bladeBiped, trackFlak, laserQuad], enemyLevel: 7, enemyWattMult: 1.1, rewardOre: 500, rewardExp: 250, rule: 'rl_storm', enemySkills: ['sk_overload'],
+};
 export const opOfDay = (d: Date = new Date()): Stage => OPS[d.getDay()];
 /** 요일 작전 적 레벨: 깬 장이 늘수록 올라간다 (1장 4 → 2장 6 → 3장 8) */
 export function opLevel(clears: Record<string, { clears: number }>): number {
@@ -158,10 +165,12 @@ export const SURVIVAL: Stage = {
   enemyLevel: 3, enemyWattMult: 0.5, rewardOre: 500, rewardExp: 260,
 };
 
-export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : s.op !== undefined ? '요일 작전' : s.tower ? '무한의 탑' : s.rush ? '보스 러시' : s.rank ? '랭크전' : `${s.chapter}-${s.no}`);
+export const stageLabel = (s: Stage): string => (s.survival ? '5분 버티기' : s.op !== undefined ? '요일 작전' : s.tower ? '무한의 탑' : s.rush ? '보스 러시' : s.rank ? '랭크전' : s.event ? '시즌 이벤트' : `${s.chapter}-${s.no}`);
 export function stageById(id: string): Stage | undefined {
   if (id === SURVIVAL.id) return SURVIVAL;
+  if (typeof id !== 'string') return undefined;
   if (id.startsWith('tower-')) { const f = Number(id.slice(6)); return Number.isInteger(f) && f >= 1 && f <= TOWER_MAX ? towerStage(f) : undefined; }
+  if (id === EVENT_STAGE.id) return EVENT_STAGE;
   const m = /^rank-(\d)-(\d{1,9})$/.exec(id);
   if (m) return rankStage(Number(m[1]), Number(m[2]));
   return STAGES.find(s => s.id === id) ?? OPS.find(s => s.id === id) ?? RUSH.find(s => s.id === id);
@@ -176,7 +185,7 @@ export function nextStage(s: Stage): Stage | undefined {
 type Clears = Record<string, { clears: number }>;
 export function isUnlocked(stage: Stage, clears: Clears): boolean {
   if (stage.rush) return (clears[CHAPTERS[1].stages[6].id]?.clears ?? 0) > 0;      // 보스 러시는 2장을 끝내면 열린다
-  if (stage.survival || stage.op !== undefined || stage.tower || stage.rank) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
+  if (stage.survival || stage.op !== undefined || stage.tower || stage.rank || stage.event) return (clears[CHAPTERS[0].stages[6].id]?.clears ?? 0) > 0;      // 1장을 끝내면 열린다
   const i = STAGES.indexOf(stage);
   if (i <= 0) return i === 0;
   return (clears[STAGES[i - 1].id]?.clears ?? 0) > 0;

@@ -328,3 +328,11 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .hg-res span { padding: 8px 10px; }
 .stage.rk .rw em { display: block; } .stage.rk { border-color: #7a5cff; }
 .rk-box { margin: 14px 4px 8px; } .rk-me { margin: 0 0 8px; font: 700 16px var(--body); } .rk-me small { font: 600 12px var(--body); color: var(--steel); }
+
+/* 시즌 이벤트·쿠폰 */
+.stage.se { border-color: #7fe8ff; } .stage.se.idle { opacity: .75; } .stage.ev { border-color: #ffd36a; margin-bottom: 8px; } .stage.se .rw em, .stage.ev .rw em { display: block; }
+.pass-lock { font-style: normal; color: var(--steel); }
+.cp-box { margin: 4px 4px 10px; } .cp-box label { display: block; margin-bottom: 6px; font: 700 13px var(--body); }
+.cp-row { display: flex; gap: 8px; } .cp-row input { flex: 1; min-width: 0; min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: #0e1a2c; color: var(--text); font: 600 15px var(--body); text-transform: uppercase; }
+.cp-row .btn { min-width: 72px; } .cp-msg { min-height: 18px; margin: 6px 0 0; font: 600 12px var(--body); color: var(--steel); } .cp-msg.bad { color: #ff8a6b; }
+.sheet > .stage, .sheet > .sp-note, .sheet > .cp-box { flex-shrink: 0; }

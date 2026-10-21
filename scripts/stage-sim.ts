@@ -2,7 +2,7 @@
 //  1장: 시작 덱·레벨 1 / 2장: 기준 덱·강화 4 + 스킬·영웅(봇) / 3장: 기준 덱·강화 7 + 스킬·영웅(봇) / 5분 버티기: 기준 덱·강화 6
 //  목표 곡선: 1장 100→35%, 2장 85→40%, 3장 70→30% (사람은 이보다 잘하므로 봇 승률이 바닥이어도 풀 수 있다)
 import { PARTS } from '../src/data/parts';
-import { STAGES, OPS, RUSH, SURVIVAL, towerStage, type Stage } from '../src/data/stages';
+import { STAGES, OPS, RUSH, EVENT_STAGE, SURVIVAL, towerStage, type Stage } from '../src/data/stages';
 import { rankStage } from '../src/domain/rank';
 import { STARTER_DECK } from '../src/domain/save';
 import type { Build } from '../src/domain/assemble';
@@ -29,8 +29,8 @@ function player(st: Stage) {
 
 const TOWER = [1, 3, 5, 8, 10, 12, 15, 20, 25, 30].map(towerStage);
 const RANK = [0, 1, 2, 3, 4, 5].flatMap(t => [1, 2, 3, 4].map(sd => rankStage(t, sd * 17 + t)));
-const pool = only === 'rank' ? RANK : only === 'tw' ? TOWER : only === 'rush' ? RUSH : [...STAGES, ...OPS, SURVIVAL];
-const list = pool.filter(s => only === 'all' || only === 'tw' || only === 'rush' || only === 'rank' || (only === 'sv' ? s.survival : only === 'op' ? s.op !== undefined : String(s.chapter) === only && !s.survival && s.op === undefined));
+const pool = only === 'event' ? [EVENT_STAGE] : only === 'rank' ? RANK : only === 'tw' ? TOWER : only === 'rush' ? RUSH : [...STAGES, ...OPS, SURVIVAL];
+const list = pool.filter(s => only === 'all' || only === 'event' || only === 'tw' || only === 'rush' || only === 'rank' || (only === 'sv' ? s.survival : only === 'op' ? s.op !== undefined : String(s.chapter) === only && !s.survival && s.op === undefined));
 for (const st of list) {
   let win = 0, secs = 0, bossHp = 0;
   for (let k = 0; k < N; k++) {

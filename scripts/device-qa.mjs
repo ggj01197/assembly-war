@@ -51,6 +51,7 @@ const scanFn = ({ k, battle }) => {
 for (const [W, H, k] of CONFIGS) {
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
+  await page.clock.install({ time: new Date(2026, 10, 10, 12, 0, 0) });   // 시즌 이벤트가 열려 있는 날짜로 고정
   const errs = []; page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
   await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
@@ -67,6 +68,8 @@ for (const [W, H, k] of CONFIGS) {
   await rec('격납고');
   await page.click('#hgSortie').catch(() => {}); await rec('작전 선택');
   await page.click('.ch-tab[data-ch="ch"]').catch(() => {}); await rec('도전 탭');
+  await page.click('#openSeason').catch(() => {}); await rec('시즌 이벤트');
+  await page.evaluate(() => window.__aw.show('hangar')); await page.click('#hgSortie').catch(() => {});
   await open('#nvMissions', '임무 일일');
   for (const [tab, name] of [['weekly', '임무 주간'], ['ach', '임무 업적']]) { await page.click(`.ms-tab[data-k="${tab}"]`).catch(() => {}); await rec(name); }
   await open('#nvAttend', '출석'); await open('#nvSupply', '보급'); await open('#nvUpgrade', '강화'); await open('#nvShop', '상점'); await open('#hgGear', '장비');
