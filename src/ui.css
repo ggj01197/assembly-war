@@ -336,3 +336,25 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .cp-row { display: flex; gap: 8px; } .cp-row input { flex: 1; min-width: 0; min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: #0e1a2c; color: var(--text); font: 600 15px var(--body); text-transform: uppercase; }
 .cp-row .btn { min-width: 72px; } .cp-msg { min-height: 18px; margin: 6px 0 0; font: 600 12px var(--body); color: var(--steel); } .cp-msg.bad { color: #ff8a6b; }
 .sheet > .stage, .sheet > .sp-note, .sheet > .cp-box { flex-shrink: 0; }
+
+/* ÄÆ½Å */
+.overlay.cutscene { position: absolute; inset: 0; z-index: 97; background: #000; overflow: hidden; pointer-events: auto; transition: opacity .35s; cursor: pointer; }
+.overlay.cutscene.out { opacity: 0; }
+.cs-img { position: absolute; inset: 0; background-size: cover; background-position: center; transform-origin: 50% 60%; }
+.cs-img.zoom { animation: csZoom 14s ease-out both, csFade .5s ease-out both; }
+.overlay.cutscene.calm .cs-img.zoom { animation: csFade .01s both; }
+@keyframes csZoom { from { transform: scale(1); } to { transform: scale(1.08); } }
+@keyframes csFade { from { opacity: 0; } to { opacity: 1; } }
+.cs-vig { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.45) 0%, transparent 18%, transparent 52%, rgba(2,6,12,.9) 100%); pointer-events: none; }
+.cs-title { position: absolute; left: 0; right: 0; top: calc(var(--safe-top) + 18px); text-align: center; font: 400 20px var(--display); color: #fff; text-shadow: 0 2px 8px #000; letter-spacing: .08em; pointer-events: none; }
+.cs-skip { position: absolute; right: 12px; top: calc(var(--safe-top) + 48px); min-width: 72px; min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(255,255,255,.4); background: rgba(6,12,20,.6); color: #fff; font: 700 13px var(--body); }
+.cs-dots { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 156px); display: flex; gap: 6px; justify-content: center; pointer-events: none; }
+.cs-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.3); } .cs-dots i.on { background: #fff; } .cs-dots i.past { background: rgba(255,255,255,.65); }
+.cs-box { position: absolute; left: 14px; right: 14px; bottom: calc(var(--safe-bottom) + 20px); min-height: 124px; padding: 14px 16px 18px; border-radius: 16px; background: rgba(8,16,28,.88); border: 1px solid rgba(95,211,255,.5); box-shadow: 0 6px 24px rgba(0,0,0,.6); pointer-events: none; }
+.cs-who { display: block; margin-bottom: 6px; font: 400 18px var(--display); color: #ffd36a; } .cs-who[hidden] { display: none; }
+.cs-tx { margin: 0; font: 600 16px/1.55 var(--body); color: #f2f7ff; min-height: 3.1em; }
+.overlay.cutscene.narr .cs-tx { font-style: italic; color: #cfe3f5; }
+.cs-next { position: absolute; right: 14px; bottom: 8px; color: #5fd3ff; font-size: 12px; animation: csBlink 1.1s infinite; }
+@keyframes csBlink { 50% { opacity: .2; } }
+@media (max-height: 640px) { .cs-box { min-height: 120px; } .cs-dots { bottom: calc(var(--safe-bottom) + 150px); } .cs-tx { font-size: 14px; } }
+@media (max-height: 500px) { .cs-box { min-height: 84px; padding: 10px 14px 14px; } .cs-dots { bottom: calc(var(--safe-bottom) + 112px); } .cs-tx { min-height: 2em; font-size: 14px; } }

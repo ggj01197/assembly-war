@@ -35,7 +35,7 @@ const scanFn = ({ k, battle }) => {
     const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) continue;
     const r = el.getBoundingClientRect(); if (r.width === 0 || r.height === 0) continue;
     if (el.closest('[hidden]')) continue;
-    if ((r.right > W + 2 || r.left < -2) && !inScroll(el) && !el.closest('.bt-boss, .bt-combo, .bt-toast')) add('화면밖', el, ` ${Math.round(r.left)}~${Math.round(r.right)}/${W}`);
+    if ((r.right > W + 2 || r.left < -2) && !inScroll(el) && !el.closest('.bt-boss, .bt-combo, .bt-toast, .cs-img')) add('화면밖', el, ` ${Math.round(r.left)}~${Math.round(r.right)}/${W}`);
     if (el.tagName === 'BUTTON' && (r.height < 30 || r.width < 30) && !el.closest('.at-grid')) add('작은버튼', el, ` ${Math.round(r.width)}×${Math.round(r.height)}`);
     if ((cs.overflowX === 'hidden' || cs.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 2 && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) add('글자잘림', el);
   }
@@ -53,7 +53,7 @@ for (const [W, H, k] of CONFIGS) {
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date(2026, 10, 10, 12, 0, 0) });   // 시즌 이벤트가 열려 있는 날짜로 고정
   const errs = []; page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+  await page.goto('http://localhost:5190/?cuts=1', { waitUntil: 'networkidle' });
   await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
   // 메뉴를 다 열어 두고(1~3장·2장 클리어) 시작
   await page.evaluate(() => { const s = window.__aw.store.getState().save; for (const id of ['c1-7', 'c2-7']) s.stages[id] = { clears: 1, bestBaseHp: 500 }; s.ore = 99999; s.tickets = 5; window.__aw.show('hangar'); });
@@ -74,6 +74,8 @@ for (const [W, H, k] of CONFIGS) {
   for (const [tab, name] of [['weekly', '임무 주간'], ['ach', '임무 업적']]) { await page.click(`.ms-tab[data-k="${tab}"]`).catch(() => {}); await rec(name); }
   await open('#nvAttend', '출석'); await open('#nvSupply', '보급'); await open('#nvUpgrade', '강화'); await open('#nvShop', '상점'); await open('#hgGear', '장비');
   await page.evaluate(() => window.__aw.show('hangar'));
+  // 컷신 (1장 첫 작전 전)
+  try { await page.evaluate(() => { window.__aw.store.getState().save.cuts = []; void window.__aw.startBattle('c1-1'); }); await page.waitForSelector('.cutscene', { timeout: 8000 }); await page.waitForTimeout(700); await rec('컷신'); await page.click('.cs-skip'); await page.waitForSelector('.screen.battle:not([hidden])', { timeout: 8000 }); await page.evaluate(() => window.__aw.show('hangar')); } catch (e) { rows.push({ tag, screen: '컷신 실패', issues: [String(e.message).slice(0, 80)] }); }
   // 전투 + 지휘 모듈 + 결과
   try {
   await page.evaluate(() => window.__aw.startBattle('c2-3')); await page.waitForSelector('.screen.battle:not([hidden])', { timeout: 15000 }); await page.waitForTimeout(500);

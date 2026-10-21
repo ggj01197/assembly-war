@@ -16,6 +16,8 @@ import { cardLevel } from '../domain/supply';
 import { ensureDaily, addProgress, todayStr, canWatchAd } from '../domain/daily';
 import { addWeekly } from '../domain/goals';
 import { settleRank } from '../domain/rank';
+import { playCutscene } from './cutscene';
+import { sceneById, chapterScene, END_SCENE } from '../data/cutscenes';
 import { activeSeason, addSeasonPoints, battlePoints, settleEvent, EVENT_WIN_POINTS } from '../domain/season';
 import { adsSupported, initAds } from '../native/ads';
 
@@ -44,7 +46,19 @@ export async function startApp(game: Phaser.Game): Promise<void> {
   type Name = keyof typeof screens;
   let current: Name | null = null;
 
+  /** 컷신 한 번 보기: 본 것으로 기록하고(건너뛰기 포함) 끝나면 이어진다 */
+  async function cutOnce(id: string): Promise<void> {
+    const sc = sceneById(id), s = store.getState().save;
+    if (!sc || s.cuts.includes(id)) return;
+    update(sv => { if (!sv.cuts.includes(id)) sv.cuts.push(id); });
+    void flushSave();
+    await playCutscene(root, sc, s.settings.reducedMotion);
+  }
+  /** 마지막 전투(3-7)를 처음 이기면 엔딩 컷신을 격납고로 돌아갈 때 보여 준다 */
+  let pendingEnd = false;
+
   function show(name: Name, arg?: unknown) {
+    if (name === 'hangar' && pendingEnd) { pendingEnd = false; void cutOnce(END_SCENE).then(() => show('hangar', arg)); return; }
     if (current && current !== name) screens[current].hide();
     hud.hide();
     current = name;
@@ -58,6 +72,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
   async function startBattle(stageId: string) {
     const stage0 = stageById(stageId); if (!stage0) return;
     if (stage0.event && !activeSeason(todayStr())) return;   // 시즌이 열려 있을 때만
+    if (!stage0.op && !stage0.tower && !stage0.rush && !stage0.rank && !stage0.event && !stage0.survival && stage0.no === 1) await cutOnce(chapterScene(stage0.chapter));   // 장의 첫 작전 전에 장 컷신
     const s = store.getState().save;
     const stage = stage0.op !== undefined || stage0.event ? { ...stage0, enemyLevel: opLevel(s.stages) } : stage0;   // 요일 작전은 진행도에 맞춰 적 레벨이 정해진다
     const player: Deck = { cards: s.deck.map(build => ({ build, level: cardLevel(build, s.partLevels) })) };
@@ -81,6 +96,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         const win = res.winner === 0;
         const cur = store.getState().save;
         const sv2 = stage.survival ? settleSurvival(cur, stage, res.seconds, win) : null;
+        if (win && stage.id === 'c3-7' && !store.getState().save.cuts.includes(END_SCENE)) pendingEnd = true;
         if (stage.rush) rushHp = win ? res.baseHp[0] : 1000;
         const tw = stage.tower ? settleTower(cur, stage, win) : null;
         const rk = stage.rank ? settleRank(cur, stage, win, weekKey()) : null;
