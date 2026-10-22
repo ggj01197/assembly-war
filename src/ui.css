@@ -392,3 +392,25 @@ i.brief { display: block; font-style: normal; color: #9fd9ff; font-weight: 700; 
 .boss-tag { font-style: normal; padding: 1px 7px; border-radius: 8px; background: #6b1d24; color: #ffb0b0; font: 800 11px var(--body); }
 .mp-story { margin: 6px 0 2px; font: 700 13px/1.4 var(--body); color: #9fd9ff; min-height: 1.2em; } .mp-hint { margin: 0 0 8px; font: 600 12px/1.45 var(--body); color: var(--steel); }
 .mp-foot { display: flex; align-items: center; gap: 10px; } .mp-foot span { flex: 1; font: 700 12px var(--body); color: #ffd36a; } .mp-go { min-width: 120px; min-height: 48px; }
+
+/* 격납고 홈 개편 (Stitch 시안 「격납고 홈」 반영): 아이콘 자원 칩 · EVENT 배너 · OPERATOR 한마디 · 큰 출격 · 하단 메뉴 막대 */
+.hg-res span i { font-style: normal; margin-right: 4px; }
+.hg-res .rs-t { border-color: rgba(95,211,255,.45); box-shadow: 0 0 10px rgba(95,211,255,.15) inset; } .hg-res .rs-o { border-color: rgba(217,164,65,.5); box-shadow: 0 0 10px rgba(217,164,65,.15) inset; }
+.hg-banner { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 6px 10px; border-radius: 12px; border: 1px solid rgba(95,211,255,.45); background: linear-gradient(90deg, rgba(14,38,58,.9), rgba(10,22,38,.85)); color: var(--text); text-align: left; flex-shrink: 0; }
+.hg-banner em { flex-shrink: 0; padding: 2px 7px; border-radius: 6px; background: #ffd36a; color: #2a1a00; font: 800 10px var(--body); font-style: normal; letter-spacing: .06em; }
+.hg-banner.se em { background: #5fd3ff; color: #06202e; }
+.hg-banner span { flex: 1; min-width: 0; font: 600 12px/1.35 var(--body); color: #cfe3f5; } .hg-banner span b { color: #fff; } .hg-banner i { font-style: normal; font-size: 18px; color: #5fd3ff; }
+.hg-op { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; border: 1px solid rgba(111,227,154,.4); background: rgba(8,22,24,.82); flex-shrink: 0; }
+.hg-op .op-av { flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; border: 2px solid #6fe39a; background: url(art/cutscenes/c01.jpg) 22% 49% / 430% auto no-repeat; box-shadow: 0 0 10px rgba(111,227,154,.35); }
+.hg-op small { display: block; font: 800 9px var(--body); letter-spacing: .1em; color: #6fe39a; } .hg-op b { display: block; font: 600 13px/1.4 var(--body); color: #eaf6ff; }
+.hg-actions .btn.sortie { position: relative; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: center; text-align: left; padding: 6px 14px; min-height: 60px; overflow: hidden; box-shadow: 0 0 22px rgba(95,211,255,.45), 0 4px 0 #0b3a52; }
+.hg-actions .btn.sortie b { grid-column: 1; font: 400 26px/1 var(--display); letter-spacing: .12em; } .hg-actions .btn.sortie small { grid-column: 1; font: 800 10px var(--body); letter-spacing: .3em; opacity: .75; }
+.hg-actions .btn.sortie i { grid-column: 2; grid-row: 1 / 3; font-style: normal; font-size: 18px; letter-spacing: -2px; }
+.hg-nav { border-top: 1px solid var(--line); padding-top: 6px; }
+.hg-nav .nv { display: grid; place-items: center; gap: 0; min-height: 52px; padding: 4px 0; font-size: 11px; }
+.hg-nav .nv-ic { font-style: normal; font-size: 20px; line-height: 1.1; }
+@media (max-height: 760px) { .hg-op small { display: none; } .hg-op { padding: 6px 10px; } .hg-op .op-av { width: 34px; height: 34px; } .hg-op b { font-size: 12px; } }
+@media (max-height: 640px) { .hg-op, .hg-banner span small { display: none; } .hg-nav .nv { min-height: 44px; } }
+.hg-actions { grid-template-columns: 0.85fr 0.85fr 1.5fr; } .hg-actions .btn:not(.sortie) { white-space: nowrap; padding-left: 6px; padding-right: 6px; font-size: 15px; }
+@media (max-height: 640px) { .hg-banner { display: none; } }
+@media (max-height: 600px) { .hg-chips, .hg-name small { display: none; } .hg-nav .nv-ic { display: none; } .hg-nav .nv { min-height: 38px; } .hg-actions .btn { min-height: 44px; } .hg-actions .btn.sortie { min-height: 50px; } .hg-actions .btn.sortie b { font-size: 22px; } .hg-slots .slot { height: 48px; } }

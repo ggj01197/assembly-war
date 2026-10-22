@@ -15,6 +15,7 @@ import { TIERS, tierOf, toNext, opponentTier, rankStage, ensureSeason, claimSeas
 import type { Nav, Screen } from './app';
 import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, seasonHtml, storyHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
 import { canAttend, missionDone, todayStr } from '../domain/daily';
+import { achClaimable } from '../domain/goals';
 import { touchDaily } from './adFlow';
 
 /** 격납고(홈): 선택한 설계도를 크게 보여 주고, 조립·출격으로 보낸다. */
@@ -32,6 +33,29 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
 
   const slotTitle = (b: Build) => partName(b.weapon);
 
+  /** 상단 배너(Stitch 시안의 EVENT 줄): 열린 시즌이 있으면 시즌, 아니면 오늘의 요일 작전 */
+  function bannerHtml(s: ReturnType<typeof store.getState>['save']): string {
+    const today = todayStr(), se = activeSeason(today);
+    if (se) return `<button class="hg-banner se" id="hgBanner" data-go="season" type="button"><em>EVENT</em><span><b>${esc(se.icon + ' ' + se.name)}</b> · 시즌 포인트 ${s.season.id === se.id ? s.season.points : 0}점 · ${daysLeft(se, today)}일 남음</span><i aria-hidden="true">›</i></button>`;
+    if (!isUnlocked(OPS[0], s.stages)) return '';
+    const op = opOfDay(), done = s.modes.opsDate === today ? s.modes.opsDone : 0;
+    return `<button class="hg-banner" id="hgBanner" data-go="ops" type="button"><em>TODAY</em><span><b>${esc(op.name)}</b> · 보상 ${Math.max(0, OP_DAILY_CAP - done)}/${OP_DAILY_CAP}회</span><i aria-hidden="true">›</i></button>`;
+  }
+
+  /** 운영자 미오의 한마디(Stitch 시안의 OPERATOR 줄): 지금 하면 좋은 일을 알려 준다 */
+  function operatorHtml(s: ReturnType<typeof store.getState>['save']): string {
+    let msg: string;
+    if (s.daily.missions.some(m => missionDone(m) && !m.claimed)) msg = '사령관님, 일일 임무 보상이 기다리고 있어요!';
+    else if (canAttend(s, todayStr())) msg = '오늘 출석 보상을 아직 안 받으셨어요.';
+    else if (s.tickets > 0 || freeChestReady(s, Date.now())) msg = '보급 상자를 열 수 있어요. 새 부품이 나올지도 몰라요!';
+    else {
+      const cur = STAGES.find(st => (s.stages[st.id]?.clears ?? 0) === 0 && isUnlocked(st, s.stages));
+      const b = cur ? storyOf(cur.id) : undefined;
+      msg = cur && b ? `다음 작전 ${cur.chapter}-${cur.no} 「${cur.name}」 — ${b.brief}.` : '모든 작전을 끝냈어요. 도전 탭에서 더 강한 상대를 만나 보세요!';
+    }
+    return `<div class="hg-op"><i class="op-av" aria-hidden="true"></i><span><small>OPERATOR · 미오</small><b>${esc(msg)}</b></span></div>`;
+  }
+
   function render() {
     const s = store.getState().save;
     const lv = commanderLevel(s.commanderExp);
@@ -47,8 +71,9 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       <div class="bg"></div>
       <header class="hg-top">
         <div class="hg-cmd"><b>Lv.${lv.level}</b><span>정비사령관</span><i class="bar"><u style="width:${Math.min(100, (lv.into / lv.need) * 100)}%"></u></i></div>
-        <div class="hg-res"><button class="hg-story" id="hgStory" type="button" aria-label="이야기 기록">📖 <b>${s.story.length}/${STORY_TOTAL}</b></button><span>보급권 <b>${s.tickets}</b></span><span>광석 <b>${s.ore.toLocaleString('ko-KR')}</b></span></div>
+        <div class="hg-res"><button class="hg-story" id="hgStory" type="button" aria-label="이야기 기록">📖 <b>${s.story.length}/${STORY_TOTAL}</b></button><span class="rs-t"><i aria-hidden="true">🎫</i>보급권 <b>${s.tickets}</b></span><span class="rs-o"><i aria-hidden="true">⛏</i>광석 <b>${s.ore.toLocaleString('ko-KR')}</b></span></div>
       </header>
+      ${bannerHtml(s)}
       <section class="hg-stage">
         <div class="hg-name"><small>설계도 ${sel + 1}</small><b>${esc(slotTitle(b))}</b><em>${esc(partName(b.legs))} · ${esc(partName(b.body))}${b.accessory ? ' · ' + esc(partName(b.accessory)) : ''}</em></div>
         <div class="hg-showcase"><div class="platform"></div>${unitFit(b, Math.min(300, window.innerWidth - 60), Math.min(250, Math.max(110, window.innerHeight - 470)), 'showcase')}</div>
@@ -63,18 +88,19 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       <section class="hg-slots">
         ${s.deck.map((d, i) => { const w = assemble(d, PARTS).watt; return `<button class="slot ${i === sel ? 'on' : ''}" data-i="${i}" type="button" aria-label="설계도 ${i + 1}">${unitFit(d, 50, 54)}<i>${w}</i></button>`; }).join('')}
       </section>
-      <nav class="hg-nav">
-        <button class="nv" id="nvMissions" type="button">임무${s.daily.missions.some(m => missionDone(m) && !m.claimed) ? '<i class="dot"></i>' : ''}</button>
-        <button class="nv" id="nvAttend" type="button">출석${canAttend(s, todayStr()) ? '<i class="dot"></i>' : ''}</button>
-        <button class="nv" id="nvSupply" type="button">보급${s.tickets > 0 || freeChestReady(s, Date.now()) ? '<i class="dot"></i>' : ''}</button>
-        <button class="nv" id="nvUpgrade" type="button">강화</button>
-        <button class="nv" id="nvShop" type="button">상점</button>
-      </nav>
+      ${operatorHtml(s)}
       <footer class="hg-actions">
-        <button class="btn ${guideAssemble ? 'pulse' : ''}" id="hgAssemble" type="button">조립${guideAssemble ? '<em>NEW</em>' : ''}</button>
-        <button class="btn" id="hgGear" type="button">장비</button>
-        <button class="btn primary big ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button">출격</button>
+        <button class="btn ${guideAssemble ? 'pulse' : ''}" id="hgAssemble" type="button">🔧 조립${guideAssemble ? '<em>NEW</em>' : ''}</button>
+        <button class="btn" id="hgGear" type="button">🎖 장비</button>
+        <button class="btn primary big sortie ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button"><b>출격</b><small>SORTIE</small><i aria-hidden="true">▶▶</i></button>
       </footer>
+      <nav class="hg-nav">
+        <button class="nv" id="nvMissions" type="button"><i class="nv-ic" aria-hidden="true">📋</i>임무${s.daily.missions.some(m => missionDone(m) && !m.claimed) || achClaimable(s) > 0 ? '<i class="dot"></i>' : ''}</button>
+        <button class="nv" id="nvAttend" type="button"><i class="nv-ic" aria-hidden="true">🗓</i>출석${canAttend(s, todayStr()) ? '<i class="dot"></i>' : ''}</button>
+        <button class="nv" id="nvSupply" type="button"><i class="nv-ic" aria-hidden="true">📦</i>보급${s.tickets > 0 || freeChestReady(s, Date.now()) ? '<i class="dot"></i>' : ''}</button>
+        <button class="nv" id="nvUpgrade" type="button"><i class="nv-ic" aria-hidden="true">🔩</i>강화</button>
+        <button class="nv" id="nvShop" type="button"><i class="nv-ic" aria-hidden="true">🛒</i>상점</button>
+      </nav>
       ${guideAssemble ? '<div class="hg-tip">첫 승리! 설계도를 바꿔 더 강해져 보세요.</div>' : ''}
       ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml(sst.msTab ?? 'daily') : sheet === 'attend' ? attendHtml() : sheet === 'season' ? seasonHtml() : sheet === 'story' ? storyHtml() : ''}`;
 
@@ -90,6 +116,11 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
     el.querySelectorAll<HTMLButtonElement>('.mp-node:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); selStage = b2.dataset.id!; render(); });
     (el.querySelector('#mapGo') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiClick'); sheet = false; nav.startBattle((el.querySelector('#mapGo') as HTMLButtonElement).dataset.id!); });
     (el.querySelector('#hgGear') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'gear'; render(); };
+    (el.querySelector('#hgBanner') as HTMLButtonElement | null)?.addEventListener('click', () => {
+      play('uiClick');
+      if ((el.querySelector('#hgBanner') as HTMLElement).dataset.go === 'season') sheet = 'season'; else { sheet = 'stage'; chap = 'ch'; selStage = null; }
+      render();
+    });
     (el.querySelector('#hgStory') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiClick'); sheet = 'story'; render(); });
     (el.querySelector('#openSeason') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiClick'); sheet = 'season'; render(); });
     (el.querySelector('#rkClaim') as HTMLButtonElement | null)?.addEventListener('click', () => {
