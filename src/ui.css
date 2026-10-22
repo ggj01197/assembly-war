@@ -337,7 +337,7 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 .cp-row .btn { min-width: 72px; } .cp-msg { min-height: 18px; margin: 6px 0 0; font: 600 12px var(--body); color: var(--steel); } .cp-msg.bad { color: #ff8a6b; }
 .sheet > .stage, .sheet > .sp-note, .sheet > .cp-box { flex-shrink: 0; }
 
-/* ÄÆ½Å */
+/* ì»·ì‹  */
 .overlay.cutscene { position: absolute; inset: 0; z-index: 97; background: #000; overflow: hidden; pointer-events: auto; transition: opacity .35s; cursor: pointer; }
 .overlay.cutscene.out { opacity: 0; }
 .cs-img { position: absolute; inset: 0; background-size: cover; background-position: center; transform-origin: 50% 60%; }

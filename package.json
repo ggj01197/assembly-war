@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/lint-names.mjs && tsc -b && vite build",
+    "build": "node scripts/lint-names.mjs && node scripts/check-utf8.mjs && tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
