@@ -9,10 +9,11 @@ import { levelMultiplier } from '../domain/upgrade';
 import { unitFit, partName, esc, TARGET_LABEL } from './unitView';
 import { play } from '../native/audio';
 import { ruleById } from '../data/rules';
+import { STORY_TOTAL, storyOf } from '../data/story';
 import { activeSeason, upcomingSeason, daysLeft } from '../domain/season';
 import { TIERS, tierOf, toNext, opponentTier, rankStage, ensureSeason, claimSeason } from '../domain/rank';
 import type { Nav, Screen } from './app';
-import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, seasonHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
+import { supplyHtml, oddsHtml, upgradeHtml, shopHtml, missionsHtml, attendHtml, seasonHtml, storyHtml, bindSheets, type SheetKind, type SheetState } from './hangarSheets';
 import { canAttend, missionDone, todayStr } from '../domain/daily';
 import { touchDaily } from './adFlow';
 
@@ -26,6 +27,8 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
   let tick: ReturnType<typeof setInterval> | null = null;
   const toast = (msg: string) => { const t = document.createElement('div'); t.className = 'hg-toast'; t.textContent = msg; el.appendChild(t); setTimeout(() => t.remove(), 1800); };
   let chap: 1 | 2 | 3 | 'sv' | 'ch' = 1;
+  /** 이야기 지도에서 고른 작전 id (없으면 지금 도전할 작전) */
+  let selStage: string | null = null;
 
   const slotTitle = (b: Build) => partName(b.weapon);
 
@@ -44,7 +47,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       <div class="bg"></div>
       <header class="hg-top">
         <div class="hg-cmd"><b>Lv.${lv.level}</b><span>정비사령관</span><i class="bar"><u style="width:${Math.min(100, (lv.into / lv.need) * 100)}%"></u></i></div>
-        <div class="hg-res"><span>보급권 <b>${s.tickets}</b></span><span>광석 <b>${s.ore.toLocaleString('ko-KR')}</b></span></div>
+        <div class="hg-res"><button class="hg-story" id="hgStory" type="button" aria-label="이야기 기록">📖 <b>${s.story.length}/${STORY_TOTAL}</b></button><span>보급권 <b>${s.tickets}</b></span><span>광석 <b>${s.ore.toLocaleString('ko-KR')}</b></span></div>
       </header>
       <section class="hg-stage">
         <div class="hg-name"><small>설계도 ${sel + 1}</small><b>${esc(slotTitle(b))}</b><em>${esc(partName(b.legs))} · ${esc(partName(b.body))}${b.accessory ? ' · ' + esc(partName(b.accessory)) : ''}</em></div>
@@ -73,7 +76,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         <button class="btn primary big ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button">출격</button>
       </footer>
       ${guideAssemble ? '<div class="hg-tip">첫 승리! 설계도를 바꿔 더 강해져 보세요.</div>' : ''}
-      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml(sst.msTab ?? 'daily') : sheet === 'attend' ? attendHtml() : sheet === 'season' ? seasonHtml() : ''}`;
+      ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml(sst.msTab ?? 'daily') : sheet === 'attend' ? attendHtml() : sheet === 'season' ? seasonHtml() : sheet === 'story' ? storyHtml() : ''}`;
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });
     (el.querySelector('#hgAssemble') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openAssembly(sel); };
@@ -81,10 +84,13 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       play('uiClick'); sheet = 'stage';
       // 아직 못 깬 첫 작전이 있는 장을 열어 준다
       const cur = STAGES.find(st => (store.getState().save.stages[st.id]?.clears ?? 0) === 0 && isUnlocked(st, store.getState().save.stages));
-      chap = cur ? cur.chapter : 3; render();
+      chap = cur ? cur.chapter : 3; selStage = null; render();
     };
-    el.querySelectorAll<HTMLButtonElement>('.ch-tab:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); chap = b2.dataset.ch === 'sv' ? 'sv' : b2.dataset.ch === 'ch' ? 'ch' : (Number(b2.dataset.ch) as 1 | 2 | 3); render(); });
+    el.querySelectorAll<HTMLButtonElement>('.ch-tab:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); chap = b2.dataset.ch === 'sv' ? 'sv' : b2.dataset.ch === 'ch' ? 'ch' : (Number(b2.dataset.ch) as 1 | 2 | 3); selStage = null; render(); });
+    el.querySelectorAll<HTMLButtonElement>('.mp-node:not(:disabled)').forEach(b2 => b2.onclick = () => { play('uiClick'); selStage = b2.dataset.id!; render(); });
+    (el.querySelector('#mapGo') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiClick'); sheet = false; nav.startBattle((el.querySelector('#mapGo') as HTMLButtonElement).dataset.id!); });
     (el.querySelector('#hgGear') as HTMLButtonElement).onclick = () => { play('uiClick'); sheet = 'gear'; render(); };
+    (el.querySelector('#hgStory') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiClick'); sheet = 'story'; render(); });
     (el.querySelector('#openSeason') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiClick'); sheet = 'season'; render(); });
     (el.querySelector('#rkClaim') as HTMLButtonElement | null)?.addEventListener('click', () => {
       const r = claimSeason(store.getState().save); if (!r) return;
@@ -103,10 +109,10 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
     for (const [id, k] of [['#nvMissions', 'missions'], ['#nvAttend', 'attend'], ['#nvSupply', 'supply'], ['#nvUpgrade', 'upgrade'], ['#nvShop', 'shop']] as const) {
       (el.querySelector(id) as HTMLButtonElement).onclick = () => { play('uiClick'); sst.drops = null; sheet = k; render(); };
     }
-    if (sheet === 'supply' || sheet === 'odds' || sheet === 'upgrade' || sheet === 'shop' || sheet === 'missions' || sheet === 'attend' || sheet === 'season') bindSheets(el, sheet, sst, { rerender: render, toast, open: k => { sheet = k; render(); } });
+    if (sheet === 'supply' || sheet === 'odds' || sheet === 'upgrade' || sheet === 'shop' || sheet === 'missions' || sheet === 'attend' || sheet === 'season' || sheet === 'story') bindSheets(el, sheet, sst, { rerender: render, toast, open: k => { sheet = k; render(); } });
     el.querySelector('#sheetClose')?.addEventListener('click', () => { play('uiBack'); sheet = false; sst.drops = null; render(); });
     el.querySelector('.sheet-dim')?.addEventListener('click', () => { sheet = false; render(); });
-    el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked):not(.gear-hero):not(.gear-skill):not(#openSeason)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
+    el.querySelectorAll<HTMLButtonElement>('.stage:not(.locked):not(.gear-hero):not(.gear-skill):not(#openSeason):not(.st-read)').forEach(b2 => b2.onclick = () => { play('uiClick'); sheet = false; nav.startBattle(b2.dataset.id!); });
   }
 
   /** 출격 장비: 영웅 1명 + 스킬 2개. 사령관 레벨이 올라야 열리는 것이 있다. */
@@ -194,14 +200,63 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       ${seasonCard(s)}${towerCard(s)}${rushCard(s)}${rankCard(s)}`;
   }
 
+  /**
+   * 이야기 지도 (Stitch 시안 「STORY MAP」 반영): 1·2·3장은 아래에서 위로 올라가는 길 위의 마디로 보인다.
+   * 깬 마디는 책(이야기 해금)+별, 지금 도전할 마디는 빛나고, 잠긴 마디는 자물쇠, 7번째는 큰 보스 마디. 마디를 누르면 아래 설명 칸에 이야기·보상이 뜨고 「작전 개시」 로 출격.
+   */
+  function mapSheet(s: ReturnType<typeof store.getState>['save'], ch: (typeof CHAPTERS)[number], tabs: string): string {
+    const cleared = (id: string) => (s.stages[id]?.clears ?? 0) > 0;
+    const cur = ch.stages.find(st => !cleared(st.id) && isUnlocked(st, s.stages)) ?? ch.stages[ch.stages.length - 1];
+    const sel = ch.stages.find(st => st.id === selStage && isUnlocked(st, s.stages)) ?? cur;
+    const N = ch.stages.length, ROW = 96, H = N * ROW + 40;
+    const XS = [50, 28, 70, 34, 72, 30, 50];
+    const pos = ch.stages.map((_, i) => ({ x: XS[i % XS.length], y: H - 20 - (i + 0.5) * ROW }));
+    const doneUpTo = Math.max(-1, ...ch.stages.map((st, i) => (cleared(st.id) ? i : -1)));
+    const trail = (upTo: number): string => { let d = ''; pos.slice(0, upTo + 1).forEach((p, i) => { if (i === 0) d += `M${p.x},${p.y}`; else { const q = pos[i - 1], my = (p.y + q.y) / 2; d += ` C${q.x},${my} ${p.x},${my} ${p.x},${p.y}`; } }); return d; };
+    const path = trail(N - 1), donePath = doneUpTo >= 1 ? trail(Math.min(N - 1, doneUpTo + 1)) : '';
+    const stars = (st: (typeof ch.stages)[number]) => { const hp = s.stages[st.id]?.bestBaseHp ?? 0; return hp >= 700 ? 3 : hp >= 350 ? 2 : 1; };
+    const nodes = ch.stages.map((st, i) => {
+      const open = isUnlocked(st, s.stages), done = cleared(st.id), isCur = st.id === cur.id && !done, boss = !!st.boss || i === N - 1;
+      const icon = done ? (s.story.includes(st.id) ? '📖' : '✔') : isCur ? '⚔' : open ? '▶' : '🔒';
+      const state = done ? 'done' : isCur ? 'cur' : open ? 'open' : 'lock';
+      return `<button class="mp-node ${state} ${boss ? 'boss' : ''} ${st.id === sel.id ? 'sel' : ''}" data-id="${st.id}" type="button" ${open ? '' : 'disabled'} style="left:${pos[i].x}%;top:${pos[i].y}px" aria-label="${ch.no}-${st.no} ${esc(st.name)}${done ? ' 완료' : open ? '' : ' 잠김'}">
+        <i class="mp-ic">${boss && !done ? '☠' : icon}</i>
+        <b class="mp-no">${ch.no}-${st.no}</b>
+        <span class="mp-nm">${esc(st.name)}</span>
+        ${done ? `<span class="mp-st">${'★'.repeat(stars(st))}${'☆'.repeat(3 - stars(st))}</span>` : isCur ? '<span class="mp-st cur">진행 중</span>' : ''}
+      </button>`;
+    }).join('');
+    const rule = ruleById(sel.rule), b = storyOf(sel.id), got = s.story.includes(sel.id), rec = s.stages[sel.id];
+    const read = ch.stages.filter(st => s.story.includes(st.id)).length;
+    const detail = `<div class="mp-detail">
+        <div class="mp-dh"><span class="mp-tag">STAGE ${ch.no}-${sel.no}</span><b>${esc(sel.name)}</b>${sel.boss ? '<em class="boss-tag">보스</em>' : ''}${rule ? `<em class="rule">${rule.icon} ${esc(rule.name)}</em>` : ''}</div>
+        <p class="mp-story">${b ? `📖 ${got ? esc(b.title) + ' (해금됨)' : esc(b.brief) + ' — 클리어하면 이야기 해금'}` : ''}</p>
+        <p class="mp-hint">${esc(sel.hint)}${rule ? ` <i class="rule-tx">규칙: ${esc(rule.desc)}</i>` : ''}</p>
+        <div class="mp-foot"><span>${rec?.clears ? `클리어 ${rec.clears}회 · ` : ''}광석 ${sel.rewardOre} · 경험치 ${sel.rewardExp}</span><button class="btn primary mp-go" id="mapGo" data-id="${sel.id}" type="button">작전 개시</button></div>
+      </div>`;
+    return `<div class="sheet-dim"></div>
+      <div class="sheet map" role="dialog" aria-label="이야기 지도">
+        <div class="sheet-head"><b>이야기 지도</b><button id="sheetClose" type="button" aria-label="닫기">✕</button></div>
+        ${tabs}
+        <div class="mp-chap"><span class="mp-tag">CHAPTER ${String(ch.no).padStart(2, '0')}</span><b>${esc(ch.name)}</b><span class="mp-prog">📖 이야기 ${read}/${N}</span></div>
+        <div class="stage-list mp-wrap"><div class="mp-map" style="height:${H}px">
+          <svg class="mp-path" viewBox="0 0 100 ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="base" d="${path}" vector-effect="non-scaling-stroke"/>${donePath ? `<path class="done" d="${donePath}" vector-effect="non-scaling-stroke"/>` : ''}</svg>
+          ${nodes}
+        </div></div>
+        ${detail}
+      </div>`;
+  }
+
   /** 작전 선택: 장 탭(1·2·3장·5분 버티기) + 전투 목록 */
   function stageSheet(): string {
     const s = store.getState().save;
     const ch = CHAPTERS.find(c => c.no === chap);
-    const tabs = `<div class="ch-tabs">${CHAPTERS.map(c => {
+    const tabsHtml = (): string => `<div class="ch-tabs">${CHAPTERS.map(c => {
       const open = isUnlocked(c.stages[0], s.stages);
       return `<button class="ch-tab ${chap === c.no ? 'on' : ''}" data-ch="${c.no}" type="button" ${open ? '' : 'disabled'}>${c.no}장${open ? '' : ' 🔒'}</button>`;
     }).join('')}<button class="ch-tab ${chap === 'sv' ? 'on' : ''}" data-ch="sv" type="button" ${isUnlocked(SURVIVAL, s.stages) ? '' : 'disabled'}>5분 버티기${isUnlocked(SURVIVAL, s.stages) ? '' : ' 🔒'}</button><button class="ch-tab ${chap === 'ch' ? 'on' : ''}" data-ch="ch" type="button" ${isUnlocked(OPS[0], s.stages) ? '' : 'disabled'}>도전${isUnlocked(OPS[0], s.stages) ? '' : ' 🔒'}</button></div>`;
+    const tabs = tabsHtml();
+    if (typeof chap === 'number' && ch) return mapSheet(s, ch, tabs);
     const list = chap === 'ch' ? challengeList(s) : chap === 'sv'
       ? `<button class="stage" data-id="${SURVIVAL.id}" type="button">
           <i class="no">∞</i>
@@ -213,7 +268,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
           const rec = s.stages[st.id];
           return `<button class="stage ${open ? '' : 'locked'}" data-id="${st.id}" type="button" ${open ? '' : 'disabled'}>
             <i class="no">${st.no}</i>
-            <span class="tx"><b>${esc(st.name)}${st.boss ? ' <em>보스</em>' : ''}${ruleById(st.rule) ? ` <em class="rule">${ruleById(st.rule)!.icon} ${esc(ruleById(st.rule)!.name)}</em>` : ''}</b><small>${open ? esc(st.hint) : '앞 작전을 먼저 끝내세요'}${open && ruleById(st.rule) ? ` <i class="rule-tx">규칙: ${esc(ruleById(st.rule)!.desc)}</i>` : ''}</small></span>
+            <span class="tx"><b>${esc(st.name)}${st.boss ? ' <em>보스</em>' : ''}${ruleById(st.rule) ? ` <em class="rule">${ruleById(st.rule)!.icon} ${esc(ruleById(st.rule)!.name)}</em>` : ''}</b><small>${storyOf(st.id) ? `<i class="brief">📖 ${esc(storyOf(st.id)!.brief)}${(store.getState().save.story.includes(st.id)) ? ' ✓' : ''}</i> ` : ''}${open ? esc(st.hint) : '앞 작전을 먼저 끝내세요'}${open && ruleById(st.rule) ? ` <i class="rule-tx">규칙: ${esc(ruleById(st.rule)!.desc)}</i>` : ''}</small></span>
             <span class="rw">${rec?.clears ? '<em>✓ 완료</em>' : `광석 ${st.rewardOre}`}</span>
           </button>`;
         }).join('');

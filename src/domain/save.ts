@@ -4,6 +4,7 @@ import type { DailyState, AttendState, AdState, MissionType, AdSlot } from './da
 import { defaultGoals, WEEKLY, ACHIEVEMENTS, type GoalsState } from './goals';
 import { defaultRank, type RankState } from './rank';
 import { defaultSeason, type SeasonState } from './season';
+import { STORY } from '../data/story';
 
 /**
  * 세이브 (TD-006): 버전 필드 + 읽을 때마다 고치기(repair). 읽지 못한 세이브는 새 게임이 덮어쓰기 전에 호출 쪽이 격리한다.
@@ -53,6 +54,8 @@ export interface SaveData {
   clockMax: string;
   /** 이미 본 컷신 id (data/cutscenes.ts) */
   cuts: string[];
+  /** 해금한 이야기(작전 id) */
+  story: string[];
 }
 
 export interface ModesState { opsDate: string; opsDone: number; towerBest: number; rushWeek: string; rushDone: boolean; rushBest: number }
@@ -78,7 +81,7 @@ export function defaultSave(allPartIds: string[]): SaveData {
     settings: { sound: true, reducedMotion: false },
     loadout: defaultLoadout(), survivalBest: 0,
     copies: {}, supply: { opened: 0, pity: 0, freeAt: 0 }, winCount: 0,
-    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(), rank: defaultRank(), season: defaultSeason(), coupons: [], clockMax: '', cuts: [],
+    daily: { date: '', missions: [], refreshed: false }, attend: { claimed: 0, lastDate: '' }, ads: { date: '', used: 0, bySlot: {} }, noAds: false, modes: defaultModes(), goals: defaultGoals(), rank: defaultRank(), season: defaultSeason(), coupons: [], clockMax: '', cuts: [], story: [],
   };
 }
 
@@ -188,6 +191,7 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
   }
   if (Array.isArray((r as { coupons?: unknown }).coupons)) out.coupons = ((r as { coupons: unknown[] }).coupons).filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{8}$/.test(x)).slice(-200);
   const ct = (r as { cuts?: unknown }).cuts; if (Array.isArray(ct)) out.cuts = [...new Set(ct.filter((x): x is string => typeof x === 'string' && /^cs-[a-z0-9]{2,8}$/.test(x)))].slice(0, 20);
+  const sty = (r as { story?: unknown }).story; if (Array.isArray(sty)) out.story = Object.keys(STORY).filter(id => (sty as unknown[]).includes(id));
   const cm = (r as { clockMax?: unknown }).clockMax; out.clockMax = typeof cm === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cm) && cm < '2100' ? cm : '';
   out.version = SAVE_VERSION;
   return out;

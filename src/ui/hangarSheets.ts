@@ -8,13 +8,15 @@ import { WEEKLY, WEEKLY_BONUS, ACHIEVEMENTS, weeklyProgress, weeklyDone, weeklyC
 import { weekKey, EVENT_STAGE } from '../data/stages';
 import { activeSeason, upcomingSeason, daysLeft, daysBetween, claimMilestone, milestoneReady, EVENT_DAILY_CAP, SEASON_DAILY_POINT_CAP } from '../domain/season';
 import { redeemCoupon } from '../domain/coupons';
+import { STORY, STORY_ORDER, STORY_TOTAL } from '../data/story';
+import { playCutscene } from './cutscene';
 import { upgradeCost, levelMultiplier, MAX_LEVEL } from '../domain/upgrade';
 import { accIconUrl, spriteUrl } from '../game/unitLayout';
 import { esc, partName } from './unitView';
 import { play } from '../native/audio';
 
 /** 격납고 시트 4종: 보급(상자) · 강화 · 상점 · 확률표. 화면 이동 없이 격납고 위에 올라온다. */
-export type SheetKind = 'supply' | 'upgrade' | 'shop' | 'odds' | 'missions' | 'attend' | 'season';
+export type SheetKind = 'supply' | 'upgrade' | 'shop' | 'odds' | 'missions' | 'attend' | 'season' | 'story';
 export interface SheetState { msTab?: 'daily' | 'weekly' | 'ach'; drops: Drop[] | null; upTab: 'legs' | 'body' | 'weapon' | 'accessory'; /** 이번 상자에 한 칸 더(광고)를 썼는가 */ extra: boolean; /** 다음 분해를 100% 로(광고 A7 시청 뒤) */ fullSalvage: boolean }
 export interface SheetCtx { rerender(): void; toast(msg: string): void; open(k: SheetKind | false): void }
 
@@ -170,6 +172,27 @@ export function missionsHtml(tab: 'daily' | 'weekly' | 'ach' = 'daily'): string 
     </div>`;
 }
 
+/** 이야기 기록: 장마다 해금한 이야기를 다시 읽는다 */
+export function storyHtml(): string {
+  const s = store.getState().save, got = new Set(s.story);
+  const groups = STORY_ORDER.map(g => {
+    const n = g.ids.filter(id => got.has(id)).length;
+    const rows = g.ids.map((id, i) => {
+      const b = STORY[id], open = got.has(id);
+      return open
+        ? `<button class="stage st-read" data-id="${id}" type="button"><i class="no">${i + 1}</i><span class="tx"><b>${esc(b.title)}</b><small>📖 ${esc(b.lines[0].who ? b.lines[0].who + ': ' : '')}${esc(b.lines[0].text.slice(0, 40))}…</small></span><span class="rw"><em>다시 읽기</em></span></button>`
+        : `<div class="stage locked st-lock"><i class="no">?</i><span class="tx"><b>? ? ?</b><small>${esc(b.brief)} — 작전을 클리어하면 해금</small></span></div>`;
+    }).join('');
+    return `<h3 class="shop-grp">${g.title} <small>${n}/${g.ids.length}</small></h3>${rows}`;
+  }).join('');
+  return `<div class="sheet-dim"></div>
+    <div class="sheet" role="dialog" aria-label="이야기 기록">
+      ${head(`📖 이야기 ${s.story.length}/${STORY_TOTAL}`)}
+      <p class="sp-note">작전을 처음 클리어할 때마다 이야기가 한 토막씩 열려요. 열린 이야기는 언제든 다시 읽을 수 있어요.</p>
+      <div class="stage-list">${groups}</div>
+    </div>`;
+}
+
 /** 시즌 이벤트 시트 */
 export function seasonHtml(): string {
   const s = store.getState().save, today = todayStr(), def = activeSeason(today);
@@ -267,6 +290,10 @@ export function bindSheets(el: HTMLElement, kind: SheetKind, st: SheetState, ctx
     const r = await watchForSlot('mission_refresh', sv => { const n = refreshMission(sv, i); if (n) Object.assign(sv, n); });
     if (!r.ok) { play('deny'); ctx.toast(r.msg); return; }
     play('uiClick'); ctx.toast('임무를 바꿨어요.'); ctx.rerender();
+  });
+  on('.st-read', b => {
+    const bt = STORY[b.dataset.id!]; if (!bt) return; play('uiClick');
+    void playCutscene(document.getElementById('ui')!, { id: 'story-r', title: `📖 ${bt.title}`, cuts: [{ img: bt.img, lines: bt.lines }] }, store.getState().save.settings.reducedMotion);
   });
   on('.se-claim', b => {
     const epics = partsOf('epic'), r = claimMilestone(store.getState().save, todayStr(), Number(b.dataset.i), epics[epics.length - 1].id); if (!r) { play('deny'); return; }

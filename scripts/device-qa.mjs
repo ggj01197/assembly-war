@@ -56,7 +56,7 @@ for (const [W, H, k] of CONFIGS) {
   await page.goto('http://localhost:5190/?cuts=1', { waitUntil: 'networkidle' });
   await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
   // 메뉴를 다 열어 두고(1~3장·2장 클리어) 시작
-  await page.evaluate(() => { const s = window.__aw.store.getState().save; for (const id of ['c1-7', 'c2-7']) s.stages[id] = { clears: 1, bestBaseHp: 500 }; s.ore = 99999; s.tickets = 5; window.__aw.show('hangar'); });
+  await page.evaluate(() => { const s = window.__aw.store.getState().save; for (const id of ['c1-7', 'c2-7']) s.stages[id] = { clears: 1, bestBaseHp: 500 }; s.ore = 99999; s.tickets = 5; s.story = ['c1-1', 'c1-2', 'c1-3', 'c2-6', 'c3-7']; window.__aw.show('hangar'); });
   const tag = `${W}×${H}${k !== 1 ? ` ×${k}` : ''}`;
   const rec = async (screen, battle = false) => {
     await page.waitForTimeout(250);
@@ -72,7 +72,7 @@ for (const [W, H, k] of CONFIGS) {
   await page.evaluate(() => window.__aw.show('hangar')); await page.click('#hgSortie').catch(() => {});
   await open('#nvMissions', '임무 일일');
   for (const [tab, name] of [['weekly', '임무 주간'], ['ach', '임무 업적']]) { await page.click(`.ms-tab[data-k="${tab}"]`).catch(() => {}); await rec(name); }
-  await open('#nvAttend', '출석'); await open('#nvSupply', '보급'); await open('#nvUpgrade', '강화'); await open('#nvShop', '상점'); await open('#hgGear', '장비');
+  await open('#hgStory', '이야기 기록'); await open('#nvAttend', '출석'); await open('#nvSupply', '보급'); await open('#nvUpgrade', '강화'); await open('#nvShop', '상점'); await open('#hgGear', '장비');
   await page.evaluate(() => window.__aw.show('hangar'));
   // 컷신 (1장 첫 작전 전)
   try { await page.evaluate(() => { window.__aw.store.getState().save.cuts = []; void window.__aw.startBattle('c1-1'); }); await page.waitForSelector('.cutscene', { timeout: 8000 }); await page.waitForTimeout(700); await rec('컷신'); await page.click('.cs-skip'); await page.waitForSelector('.screen.battle:not([hidden])', { timeout: 8000 }); await page.evaluate(() => window.__aw.show('hangar')); } catch (e) { rows.push({ tag, screen: '컷신 실패', issues: [String(e.message).slice(0, 80)] }); }

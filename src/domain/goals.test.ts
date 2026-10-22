@@ -27,8 +27,8 @@ describe('주간 과제', () => {
 });
 
 describe('업적', () => {
-  it('22개, id 중복 없음, 보상은 모두 양수', () => {
-    expect(ACHIEVEMENTS.length).toBe(22); expect(new Set(ACHIEVEMENTS.map(a => a.id)).size).toBe(ACHIEVEMENTS.length);
+  it('25개, id 중복 없음, 보상은 모두 양수', () => {
+    expect(ACHIEVEMENTS.length).toBe(25); expect(new Set(ACHIEVEMENTS.map(a => a.id)).size).toBe(ACHIEVEMENTS.length);
     for (const a of ACHIEVEMENTS) { expect(a.reward.ore, a.id).toBeGreaterThan(0); expect(a.target).toBeGreaterThan(0); }
   });
   it('조건을 채우면 받을 수 있고 한 번만 받는다', () => {

@@ -358,3 +358,37 @@ button { font-family: var(--body); color: inherit; border: 0; background: none; 
 @keyframes csBlink { 50% { opacity: .2; } }
 @media (max-height: 640px) { .cs-box { min-height: 120px; } .cs-dots { bottom: calc(var(--safe-bottom) + 150px); } .cs-tx { font-size: 14px; } }
 @media (max-height: 500px) { .cs-box { min-height: 84px; padding: 10px 14px 14px; } .cs-dots { bottom: calc(var(--safe-bottom) + 112px); } .cs-tx { min-height: 2em; font-size: 14px; } }
+
+/* 이야기 기록·작전 한 줄 소개 */
+.hg-story { min-height: 40px; padding: 6px 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(7,13,22,.6); color: var(--steel); font: 400 13px var(--body); }
+.hg-story b { color: var(--bronze); font: 400 16px var(--display); margin-left: 2px; }
+i.brief { display: block; font-style: normal; color: #9fd9ff; font-weight: 700; margin-bottom: 2px; }
+.stage.st-lock { opacity: .55; cursor: default; } .stage.st-read .rw em { display: block; }
+
+/* 이야기 지도 (Stitch 시안 반영) */
+.sheet.map { max-height: 92vh; }
+.mp-chap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 8px; flex-shrink: 0; }
+.mp-chap b { font: 700 16px var(--body); } .mp-prog { margin-left: auto; font: 700 12px var(--body); color: #ffd36a; }
+.mp-tag { padding: 3px 8px; border-radius: 6px; background: #5fd3ff; color: #06202e; font: 800 10px var(--body); letter-spacing: .06em; }
+.mp-wrap { flex: 1 1 auto; min-height: 220px; overflow-y: auto; overflow-x: hidden; border-radius: 14px; background: linear-gradient(180deg, rgba(8,16,28,.55), rgba(12,26,44,.75)); border: 1px solid var(--line); }
+.mp-map { position: relative; width: 100%; }
+.mp-path { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.mp-path path { fill: none; stroke-linecap: round; } .mp-path .base { stroke: rgba(120,160,200,.28); stroke-width: 3; stroke-dasharray: 6 8; } .mp-path .done { stroke: #6fe39a; stroke-width: 4; filter: drop-shadow(0 0 4px rgba(111,227,154,.7)); }
+.mp-node { position: absolute; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 1px; width: 112px; padding: 0; background: none; border: 0; color: var(--text); text-align: center; cursor: pointer; }
+.mp-ic { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 14px; background: rgba(18,34,56,.95); border: 2px solid var(--line); font-style: normal; font-size: 24px; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+.mp-no { font: 800 11px var(--body); color: #9fd9ff; } .mp-nm { font: 700 12px/1.25 var(--body); max-width: 110px; }
+.mp-st { font: 700 11px var(--body); color: #ffd36a; letter-spacing: .1em; } .mp-st.cur { color: #06202e; background: #5fd3ff; padding: 1px 8px; border-radius: 8px; letter-spacing: 0; }
+.mp-node.done .mp-ic { border-color: #6fe39a; background: rgba(20,52,40,.95); }
+.mp-node.cur .mp-ic { border-color: #5fd3ff; background: rgba(20,60,86,.98); box-shadow: 0 0 0 3px rgba(95,211,255,.25), 0 0 22px rgba(95,211,255,.55); animation: mpPulse 1.8s ease-in-out infinite; }
+.mp-node.open .mp-ic { border-color: #7fa9d6; }
+.mp-node.lock { opacity: .45; cursor: default; }
+.mp-node.boss .mp-ic { width: 66px; height: 66px; font-size: 32px; border-color: #ff6b6b; background: rgba(60,16,22,.95); }
+.mp-node.boss.done .mp-ic { border-color: #6fe39a; background: rgba(20,52,40,.95); }
+.mp-node.sel .mp-ic { outline: 3px solid #ffd36a; outline-offset: 2px; }
+@keyframes mpPulse { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .mp-node.cur .mp-ic { animation: none; } }
+.mp-detail { flex-shrink: 0; margin-top: 10px; padding: 10px 12px 12px; border-radius: 14px; background: rgba(10,20,34,.96); border: 1px solid #3a5f86; }
+.mp-dh { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .mp-dh b { font: 700 16px var(--body); }
+.boss-tag { font-style: normal; padding: 1px 7px; border-radius: 8px; background: #6b1d24; color: #ffb0b0; font: 800 11px var(--body); }
+.mp-story { margin: 6px 0 2px; font: 700 13px/1.4 var(--body); color: #9fd9ff; min-height: 1.2em; } .mp-hint { margin: 0 0 8px; font: 600 12px/1.45 var(--body); color: var(--steel); }
+.mp-foot { display: flex; align-items: center; gap: 10px; } .mp-foot span { flex: 1; font: 700 12px var(--body); color: #ffd36a; } .mp-go { min-width: 120px; min-height: 48px; }

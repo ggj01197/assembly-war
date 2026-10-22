@@ -83,6 +83,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'ac_att28', title: '개근 한 달', desc: '출석 28일 받기', icon: '🏅', target: 28, cur: s => s.attend.claimed, reward: R(1200, 3) },
 ];
 
+ACHIEVEMENTS.push(
+  { id: 'ac_story7', title: '이야기 수집가', desc: '이야기 7개 해금', icon: '📖', target: 7, cur: s => s.story.length, reward: R(300) },
+  { id: 'ac_story15', title: '이야기 연구가', desc: '이야기 15개 해금', icon: '📚', target: 15, cur: s => s.story.length, reward: R(700, 1) },
+  { id: 'ac_story22', title: '공방의 기록자', desc: '이야기 22개 모두 해금', icon: '🏛', target: 22, cur: s => s.story.length, reward: R(1500, 3) },
+);
+
 export const achProgress = (s: SaveData, a: AchievementDef): number => Math.min(a.target, Math.max(0, Math.floor(a.cur(s))));
 export const achDone = (s: SaveData, a: AchievementDef): boolean => a.cur(s) >= a.target;
 export const achClaimed = (s: SaveData, id: string): boolean => s.goals.ach.includes(id);

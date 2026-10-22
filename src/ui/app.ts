@@ -17,6 +17,7 @@ import { ensureDaily, addProgress, todayStr, canWatchAd } from '../domain/daily'
 import { addWeekly } from '../domain/goals';
 import { settleRank } from '../domain/rank';
 import { playCutscene } from './cutscene';
+import { storyOf } from '../data/story';
 import { sceneById, chapterScene, END_SCENE } from '../data/cutscenes';
 import { activeSeason, addSeasonPoints, battlePoints, settleEvent, EVENT_WIN_POINTS } from '../domain/season';
 import { adsSupported, initAds } from '../native/ads';
@@ -53,6 +54,11 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     update(sv => { if (!sv.cuts.includes(id)) sv.cuts.push(id); });
     void flushSave();
     await playCutscene(root, sc, s.settings.reducedMotion);
+  }
+  /** 작전을 처음 이겨 해금한 이야기를 한 토막 보여 준다(결과 화면 위) */
+  async function showStory(id: string): Promise<void> {
+    const b = storyOf(id); if (!b) return;
+    await playCutscene(root, { id: 'story-' + id, title: `📖 새 이야기 · ${b.title}`, cuts: [{ img: b.img, lines: b.lines }] }, store.getState().save.settings.reducedMotion);
   }
   /** 마지막 전투(3-7)를 처음 이기면 엔딩 컷신을 격납고로 돌아갈 때 보여 준다 */
   let pendingEnd = false;
@@ -96,6 +102,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         const win = res.winner === 0;
         const cur = store.getState().save;
         const sv2 = stage.survival ? settleSurvival(cur, stage, res.seconds, win) : null;
+        const newStory = win && !!storyOf(stage.id) && !store.getState().save.story.includes(stage.id) ? stage.id : null;
         if (win && stage.id === 'c3-7' && !store.getState().save.cuts.includes(END_SCENE)) pendingEnd = true;
         if (stage.rush) rushHp = win ? res.baseHp[0] : 1000;
         const tw = stage.tower ? settleTower(cur, stage, win) : null;
@@ -110,6 +117,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
             if (win) addProgress(sv, 'win', 1);
             addProgress(sv, 'deploy', res.spawned[0]); addProgress(sv, 'kills', res.kills[0]); addProgress(sv, 'towers', res.crowns[0]);
             addProgress(sv, 'skill', res.skillUses[0]); addProgress(sv, 'hero', res.heroDeploys[0]);
+            if (newStory && !sv.story.includes(newStory)) sv.story.push(newStory);
             // 주간 과제
             const wk = weekKey();
             if (win) { addWeekly(sv, 'wins', wk); if (stage.op !== undefined) addWeekly(sv, 'ops', wk); if (stage.boss) addWeekly(sv, 'boss', wk); }
@@ -128,6 +136,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
           data.onContinue = () => { b.revive(); screens.result.hide(); current = null; playMusic('survival'); game.scene.start('battle', cfg); };
         } else commit();
         current = 'result'; playMusic('hangar'); screens.result.show(data);
+        if (newStory) setTimeout(() => { void showStory(newStory); }, 700);
         finish();
       },
       onQuit: () => { finish(); show('hangar'); },
