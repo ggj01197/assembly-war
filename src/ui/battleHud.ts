@@ -2,7 +2,7 @@ import type { Battle, ModuleOffer } from '../domain/battle/sim';
 import type { Build } from '../domain/assemble';
 import { moduleById, CAT_LABEL, type ModuleDef } from '../domain/modules';
 import type { Stage } from '../data/stages';
-import { BASE_HP, WATT_POOL } from '../domain/battle/sim';
+import { WATT_POOL } from '../domain/battle/sim';
 import { unitFit, esc, partName } from './unitView';
 import { play } from '../native/audio';
 import { skillById, KIND_LABEL, SKILL_COOLDOWN_SEC, HERO_SKILL_COOLDOWN_SEC, HERO_WATT } from '../domain/loadout';
@@ -19,7 +19,7 @@ export interface HudSel { card: number | null; skill: number | null; hero: boole
 export class BattleHud {
   readonly el: HTMLElement;
   private cards: HTMLButtonElement[] = [];
-  private timerEl!: HTMLElement; private enemyBar!: HTMLElement; private myBar!: HTMLElement; private enemyNum!: HTMLElement; private myNum!: HTMLElement;
+  private timerEl!: HTMLElement;
   private wattFill!: HTMLElement; private wattNum!: HTMLElement; private hintEl!: HTMLElement; private toastEl!: HTMLElement; private pointEl!: HTMLElement;
   private quitArmed = 0;
   private comboT: ReturnType<typeof setTimeout> | null = null;
@@ -42,15 +42,13 @@ export class BattleHud {
     this.handOn = battle.handOn;
     this.el.innerHTML = `
       <header class="bt-top">
-        <button class="quit" type="button" aria-label="나가기">나가기</button>
+        <button class="quit" type="button" aria-label="나가기"><span aria-hidden="true">‹</span><small>나가기</small></button>
         <div class="bt-mid"><b id="btTime">3:00</b><i class="crowns" id="btCrowns"></i><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}${battle.rule ? ` · ${battle.rule.icon} ${esc(battle.rule.name)}` : ''}</small></div>
         <div class="bt-point" id="btPoint" title="중앙 거점">거점</div>
       </header>
-      <div class="bt-bars top"><span>적 기지</span><i class="hpbar"><u id="btEnemy"></u></i><em id="btEnemyN">${BASE_HP}</em></div>
       <div class="bt-hint" id="btHint">${battle.rule ? `<b>${battle.rule.icon} ${esc(battle.rule.name)}</b> ${esc(battle.rule.desc)}<br>` : ''}${esc(stage.hint)}</div>
       <div class="bt-toast" id="btToast"></div>
       <footer class="bt-tray">
-        <div class="bt-bars"><span>내 기지</span><i class="hpbar mine"><u id="btMine"></u></i><em id="btMineN">${BASE_HP}</em></div>
         <div class="bt-watt ${battle.hero[0] ? 'has-hero' : ''}"><i class="wfill"><u id="btWatt"></u><s></s></i><b id="btWattN">5</b><small>와트</small>${battle.hero[0] ? `<div class="bt-hero">
         <button class="hs" id="btHeroSkill" type="button" aria-label="영웅 기술 ${esc(battle.hero[0]!.def.skill.name)}"><u class="cd"></u><b>${esc(battle.hero[0]!.def.skill.name)}</b></button>
         <button class="hb" id="btHeroBtn" type="button" aria-label="영웅 ${esc(battle.hero[0]!.def.name)}"><u class="cd"></u>${unitFit(battle.hero[0]!.def.build, 40, 46)}<small id="btHeroTx">출격 ${HERO_WATT}</small></button>
@@ -64,7 +62,7 @@ export class BattleHud {
         </div>
       </footer>`;
     const q = <T extends HTMLElement>(s: string) => this.el.querySelector(s) as T;
-    this.timerEl = q('#btTime'); this.enemyBar = q('#btEnemy'); this.myBar = q('#btMine'); this.enemyNum = q('#btEnemyN'); this.myNum = q('#btMineN');
+    this.timerEl = q('#btTime');
     this.wattFill = q('#btWatt'); this.wattNum = q('#btWattN'); this.hintEl = q('#btHint'); this.toastEl = q('#btToast'); this.pointEl = q('#btPoint');
     this.cards = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.card[data-i]'));
     this.cards.forEach(c => {
@@ -151,10 +149,6 @@ export class BattleHud {
     this.timerEl.classList.toggle('ot', b.overtime);
     if (this.crownEl) this.crownEl.innerHTML = b.survival || !b.towersOn ? '' : `<b class="me">내 ${'★'.repeat(b.crowns(0)) || '☆'}</b><b class="foe">${'★'.repeat(b.crowns(1)) || '☆'} 적</b>`;
     if (b.survival && this.subEl) this.subEl.textContent = `5분 버티기 · 웨이브 ${b.wave + 1}`;
-    this.enemyBar.style.width = `${Math.max(0, (b.baseHp[1] / BASE_HP) * 100)}%`;
-    this.myBar.style.width = `${Math.max(0, (b.baseHp[0] / BASE_HP) * 100)}%`;
-    this.enemyNum.textContent = String(Math.max(0, Math.ceil(b.baseHp[1])));
-    this.myNum.textContent = String(Math.max(0, Math.ceil(b.baseHp[0])));
     const w = b.watt[0];
     this.wattFill.style.width = `${(w / WATT_POOL) * 100}%`;
     this.wattNum.textContent = String(Math.floor(w));
@@ -205,8 +199,8 @@ export class BattleHud {
 
   /** 전장이 쓸 수 있는 세로 구간 (HTML 위·아래 가림막 높이) */
   metrics(): { top: number; tray: number } {
-    const bars = this.el.querySelector('.bt-bars.top') as HTMLElement | null, tray = this.el.querySelector('.bt-tray') as HTMLElement | null;
-    return { top: bars ? bars.getBoundingClientRect().bottom : 84, tray: tray ? window.innerHeight - tray.getBoundingClientRect().top : 176 };
+    const top = this.el.querySelector('.bt-top') as HTMLElement | null, tray = this.el.querySelector('.bt-tray') as HTMLElement | null;
+    return { top: top ? top.getBoundingClientRect().bottom + 4 : 84, tray: tray ? window.innerHeight - tray.getBoundingClientRect().top : 176 };
   }
 
   hide(): void { this.el.hidden = true; this.hideOffer(); if (this.hintT) clearTimeout(this.hintT); }

@@ -92,6 +92,7 @@ export class BattleScene extends Phaser.Scene {
   private dead = false;
   private hoverLane = -1;
   private bossText: Phaser.GameObjects.Text | null = null;
+  private baseTxt: [Phaser.GameObjects.Text | null, Phaser.GameObjects.Text | null] = [null, null];
   private motes: { x: number; y: number; v: number; s: number }[] = [];
   private towerImgs: Phaser.GameObjects.Image[][] = [[], []];
   private towerKick: number[][] = [[0, 0, 0], [0, 0, 0]]; private towerFlash: number[][] = [[0, 0, 0], [0, 0, 0]]; private towerSmoke = 0;
@@ -102,7 +103,7 @@ export class BattleScene extends Phaser.Scene {
 
   init(cfg: BattleConfig) {
     this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
-    this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hoverLane = -1; this.bossText = null;
+    this.baseFlash = [0, 0]; this.pointPulse = 0; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hoverLane = -1; this.bossText = null; this.baseTxt = [null, null];
     this.towerImgs = [[], []]; this.towerKick = [[0, 0, 0], [0, 0, 0]]; this.towerFlash = [[0, 0, 0], [0, 0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
   }
 
@@ -666,16 +667,26 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private plate(g: Phaser.GameObjects.Graphics, team: 0 | 1, hpFrac: number, flash: number) {
-    const near = team === 0, y = this.baseY(team), t = near ? 0 : 1;
-    const hw = near ? this.W * 0.46 : this.W * 0.27, hh = near ? 13 : 9;
-    const col = near ? 0x5fd3ff : 0xff7a45;
-    const skew = near ? 0 : 0;
-    g.fillStyle(0x05080e, 0.7); g.fillRoundedRect(this.W / 2 - hw - 3 + skew, y - hh - 3, (hw + 3) * 2, hh * 2 + 6, 8);
-    g.fillStyle(col, 0.18); g.fillRoundedRect(this.W / 2 - hw, y - hh, hw * 2, hh * 2, 6);
-    g.fillStyle(col, 0.95); g.fillRoundedRect(this.W / 2 - hw + 3, y - hh + 3, Math.max(0, (hw * 2 - 6) * hpFrac), hh * 2 - 6, 4);
-    g.lineStyle(2, col, 0.95); g.strokeRoundedRect(this.W / 2 - hw, y - hh, hw * 2, hh * 2, 6);
-    if (flash > 0) { g.fillStyle(0xffffff, 0.55 * flash); g.fillRoundedRect(this.W / 2 - hw, y - hh, hw * 2, hh * 2, 6); }
-    void t;
+    // 기지 문: 육각 철문 + 팀 색 테두리 + 20칸 체력 막대 + 가운데 숫자 (Stitch 시안의 「기지 게이트」)
+    const near = team === 0, y = this.baseY(team), cx = this.W / 2;
+    const hw = near ? this.W * 0.47 : this.W * 0.31, hh = near ? 19 : 13, ch = near ? 12 : 9;
+    const col = near ? 0x5fd3ff : 0xff7a45, N = 20, f = Math.max(0, Math.min(1, hpFrac));
+    const hex = (grow: number): Phaser.Geom.Point[] => [[-hw + ch + grow, -hh - grow], [hw - ch - grow, -hh - grow], [hw + grow, 0], [hw - ch - grow, hh + grow], [-hw + ch + grow, hh + grow], [-hw - grow, 0]].map(([dx, dy]) => new Phaser.Geom.Point(cx + dx, y + dy));
+    g.fillStyle(col, 0.1); g.fillPoints(hex(9), true);                                  // 바깥 빛
+    g.fillStyle(0x06101c, 0.94); g.fillPoints(hex(0), true);                           // 철문 몸체
+    g.fillStyle(0xffffff, 0.06); g.fillRect(cx - hw + ch, y - hh, (hw - ch) * 2, 3);   // 윗면 하이라이트
+    g.lineStyle(2, col, 0.95); g.strokePoints(hex(0), true);
+    g.lineStyle(1, col, 0.35); g.strokePoints(hex(-5), true);
+    const bx = cx - hw + ch + 8, bw = (hw - ch - 8) * 2, by = y - 5, bh = 10;
+    g.fillStyle(0x000000, 0.55); g.fillRoundedRect(bx - 2, by - 2, bw + 4, bh + 4, 5);
+    const on = Math.ceil(f * N), sw = bw / N;
+    const tint = f > 0.5 ? col : f > 0.25 ? 0xffd067 : 0xff4d4d;
+    for (let i = 0; i < N; i++) { g.fillStyle(i < on ? tint : 0x2a3a52, i < on ? 0.95 : 0.55); g.fillRect(bx + i * sw + 1, by, sw - 2, bh); }
+    for (const sx of [-1, 1]) { g.fillStyle(col, 0.9); g.fillCircle(cx + sx * (hw - ch - 2), y, 2.5); }   // 양끝 볼트
+    if (flash > 0) { g.fillStyle(0xffffff, 0.5 * flash); g.fillPoints(hex(0), true); }
+    const k = team, label = Math.max(0, Math.ceil(this.cfg.battle.baseHp[team]));
+    if (!this.baseTxt[k]) this.baseTxt[k] = this.add.text(cx, y, '', { fontFamily: 'Black Han Sans, Noto Sans KR, sans-serif', fontSize: near ? '15px' : '12px', color: '#ffffff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(7);
+    this.baseTxt[k]!.setText(String(label)).setPosition(cx, y + (near ? -1 : -1));
   }
 
   private draw(b: Battle, delta: number) {
