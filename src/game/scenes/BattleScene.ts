@@ -56,6 +56,8 @@ const PROJ: Record<string, { key: string; dur: number; arc: number; w: number; c
 /** Codex 가 그린 부품 동작 그림(4프레임 가로 시트): 부품id → {여백, 있는 면}. 텍스처 키 'an_'+(뒷모습이면 'b_')+id, 프레임 f0~f3 */
 const ANIM = animFrames as unknown as Record<string, { m: [number, number, number]; sides: ('front' | 'back')[] }>;
 const FX_KEYS = ['fx_explosion', 'fx_smoke', 'fx_spark', 'fx_energy', 'fx_slash', 'fx_muzzle', 'fx_heal', 'fx_ring', 'fx_shield', 'pj_bullet', 'pj_missile', 'pj_shell', 'pj_laser', 'pj_flak', 'pj_plasma'];
+const MAIN_STATES = ['ok', 'hurt', 'dead', 'fire'];
+const MAIN_KEYS = ['f', 'b'].flatMap(sd => MAIN_STATES.map(st => `main_${sd}_${st}`));   // 메인 타워(기지) 전용 건물 그림
 const TOWER_KEYS = ['tower_f_ok', 'tower_f_hurt', 'tower_f_dead', 'tower_b_ok', 'tower_b_hurt', 'tower_b_dead'];
 const TRAY_H = 176;     // CSS 와 같아야 한다 (battle .bt-tray)
 const TOP_H = 84;       // 위 막대·타이머
@@ -94,6 +96,8 @@ export class BattleScene extends Phaser.Scene {
   private selHero = false;
   private ended = false;
   private baseFlash: [number, number] = [0, 0];
+  /** 메인 타워 건물 바로 아래(체력 문 자리)의 화면 y — 건물 그림 높이에 따라 매 프레임 갱신 */
+  private basePlateY: [number, number] = [0, 0];
   private fxK = 0.6; private W = 390; private H = 844; private y0 = 130; private y1 = 600; private k = 0.6;
   private firstSpawnHinted = false;
   private wattFull = false;
@@ -113,7 +117,7 @@ export class BattleScene extends Phaser.Scene {
   init(cfg: BattleConfig) {
     this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
     this.baseFlash = [0, 0]; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hover = null; this.bossText = null; this.baseTxt = [null, null];
-    this.towerImgs = [[], []]; this.towerKick = [[0, 0, 0], [0, 0, 0]]; this.towerFlash = [[0, 0, 0], [0, 0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
+    this.towerImgs = [[], []]; this.basePlateY = [0, 0]; this.towerKick = [[0, 0, 0], [0, 0, 0]]; this.towerFlash = [[0, 0, 0], [0, 0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
   }
 
   preload() {
@@ -129,7 +133,7 @@ export class BattleScene extends Phaser.Scene {
     addB(b0.bossDef?.build);
     for (const [pid, info] of Object.entries(ANIM)) if (need.has(pid)) for (const side of info.sides) { const key = 'an_' + (side === 'back' ? 'b_' : '') + pid; if (!this.textures.exists(key)) this.load.image(key, `sprites/anim/${pid}_${side}.png`); }
     for (const k of FX_KEYS) if (!this.textures.exists(k)) this.load.image(k, `sprites/fx/${k}.png`);
-    for (const k of TOWER_KEYS) if (!this.textures.exists(k)) this.load.image(k, `sprites/tower/${k}.png`);
+    for (const k of [...TOWER_KEYS, ...MAIN_KEYS]) if (!this.textures.exists(k)) this.load.image(k, `sprites/tower/${k}.png`);
     this.load.on('loaderror', () => { /* 뒷모습이 없으면 앞모습으로 대신한다 (layoutUnit) */ });
   }
 
@@ -300,12 +304,16 @@ export class BattleScene extends Phaser.Scene {
       const isBase = l === SIDES;
       if (!isBase && !b.towersOn) { im.setVisible(false); continue; }
       const hp = isBase ? b.baseHp[team] : b.towers[team][l].hp, maxHp = isBase ? 1000 : b.towers[team][l].maxHp, f = hp / maxHp, pre = team === 0 ? 'tower_b_' : 'tower_f_';
-      const key = pre + (hp <= 0 ? 'dead' : f < 0.45 ? 'hurt' : 'ok');
-      if (im.texture.key !== key) im.setTexture(key);
-      const { x, y, s } = this.towerXY(team, l), okW = this.textures.get(pre + 'ok').getSourceImage().width;
-      const dw = this.W * (isBase ? 0.3 : 0.17) * s, k = dw / okW, src = im.texture.getSourceImage();
       this.towerKick[team][l] = Math.max(0, this.towerKick[team][l] - dt * 7); this.towerFlash[team][l] = Math.max(0, this.towerFlash[team][l] - dt * 8);
       const kick = this.cfg.reducedMotion ? 0 : this.towerKick[team][l];
+      // 메인 타워는 사이드 포탑과 다른 전용 건물 그림(있으면): 멀쩡·손상·파괴, 쏜 직후에는 발사 장면
+      const mainPre = `main_${team === 0 ? 'b' : 'f'}_`, useMain = isBase && this.textures.exists(mainPre + 'ok');
+      const state = hp <= 0 ? 'dead' : useMain && kick > 0.45 ? 'fire' : f < 0.45 ? 'hurt' : 'ok';
+      const key = (useMain ? mainPre : pre) + state;
+      if (im.texture.key !== key) im.setTexture(key);
+      const { x, y, s } = this.towerXY(team, l), okW = this.textures.get((useMain ? mainPre : pre) + 'ok').getSourceImage().width;
+      const dw = this.W * (isBase ? (useMain ? 0.36 : 0.3) : 0.17) * s, k = dw / okW, src = im.texture.getSourceImage();
+      if (isBase) this.basePlateY[team] = y + src.height * k * 0.12 + 14 * s;   // 체력 문은 건물 그림 아래에 따로
       im.setPosition(x, y + kick * 4 * s * (team === 0 ? 1 : -1)).setDisplaySize(src.width * k * (1 + kick * 0.04), src.height * k * (1 - kick * 0.03)).setDepth(y).setVisible(true);
       if (this.towerFlash[team][l] > 0.3 && hp > 0) im.setTintFill(0xffffff); else im.clearTint();
       if (!isBase && hp > 0 && f < 1) {
@@ -832,7 +840,7 @@ export class BattleScene extends Phaser.Scene {
 
   private plate(g: Phaser.GameObjects.Graphics, team: 0 | 1, hpFrac: number, flash: number) {
     // 기지 문: 육각 철문 + 팀 색 테두리 + 20칸 체력 막대 + 가운데 숫자 (Stitch 시안의 「기지 게이트」)
-    const near = team === 0, bp = basePos(team), q = this.proj(bp.x, bp.y), cx = q.x, y = q.y + 10 * q.s;
+    const near = team === 0, bp = basePos(team), q = this.proj(bp.x, bp.y), cx = q.x, y = this.basePlateY[team] || q.y + 30 * q.s;
     const hw = this.pxX(q.t) * 3.1, hh = 12 * q.s + 3, ch = 9 * q.s + 2;
     const col = near ? 0x5fd3ff : 0xff7a45, N = 20, f = Math.max(0, Math.min(1, hpFrac));
     const hex = (grow: number): Phaser.Geom.Point[] => [[-hw + ch + grow, -hh - grow], [hw - ch - grow, -hh - grow], [hw + grow, 0], [hw - ch - grow, hh + grow], [-hw + ch + grow, hh + grow], [-hw - grow, 0]].map(([dx, dy]) => new Phaser.Geom.Point(cx + dx, y + dy));
