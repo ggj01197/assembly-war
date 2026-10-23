@@ -153,7 +153,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       <div class="sheet" role="dialog" aria-label="출격 장비">
         <div class="sheet-head"><b>출격 장비</b><button id="sheetClose" type="button" aria-label="닫기">✕</button></div>
         <div class="stage-list">
-          <h3 class="gear-h">영웅 (1명 · 와트 6 · 탭으로 길 이동 지시)</h3>
+          <h3 class="gear-h">영웅 (1명 · 와트 6 · 내 진영 어디든 출격)</h3>
           ${HEROES.map(h => {
             const open = h.unlock <= lv;
             return `<button class="stage gear-hero ${open ? '' : 'locked'} ${lo.hero === h.id ? 'picked' : ''}" data-id="${h.id}" type="button" ${open ? '' : 'disabled'}>

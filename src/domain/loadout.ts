@@ -14,7 +14,7 @@ export const HERO_MOVE_COOLDOWN_SEC = 5;
 export type SkillKind = 'attack' | 'defense' | 'curse' | 'base';
 export interface SkillDef {
   id: string; name: string; kind: SkillKind; watt: number;
-  /** 길을 골라야 하는가 */
+  /** 놓을 지점(전장 한 곳)을 골라야 하는가 */
   needsLane: boolean;
   /** 지속 시간(초), 없으면 즉시 효과 */
   dur?: number;

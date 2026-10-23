@@ -59,7 +59,7 @@ const lanceTrack: Build = { legs: 'legs_track_light', body: 'body_arm_assault', 
 
 const CH1: Raw[] = [
   { id: 'c1-1', no: 1, name: '첫 출동', hint: '아래 카드를 누른 뒤, 아군 쪽 길을 눌러 생산하세요.', enemy: [biped], enemyLevel: 1, enemyWattMult: 0.45, rewardOre: 120, rewardExp: 60 },
-  { id: 'c1-2', no: 2, name: '세 갈래 길', hint: '적이 몰린 길에 유닛을 놓아 막으세요.', enemy: [biped, trackGat], enemyLevel: 1, enemyWattMult: 0.6, rewardOre: 140, rewardExp: 70 },
+  { id: 'c1-2', no: 2, name: '두 갈래 길', hint: '적이 몰린 길에 유닛을 놓아 막으세요.', enemy: [biped, trackGat], enemyLevel: 1, enemyWattMult: 0.6, rewardOre: 140, rewardExp: 70 },
   { id: 'c1-3', no: 3, name: '첫 조립', hint: '격납고의 「조립」에서 설계도를 바꿔 오면 더 강해집니다.', enemy: [trackGat, trackCannon], enemyLevel: 1, enemyWattMult: 0.65, rewardOre: 160, rewardExp: 80 },
   { id: 'c1-4', no: 4, name: '하늘의 적', hint: '공중 유닛은 어깨형 미사일만 맞힙니다. 대공 카드를 준비하세요.', enemy: [hoverGat, hoverMissile, trackGat], enemyLevel: 1, enemyWattMult: 0.7, rewardOre: 180, rewardExp: 90 },
   { id: 'c1-5', rule: 'rl_storm', no: 5, name: '중앙 교차로', hint: '와트가 번갈아 빠르게·느리게 충전됩니다. 빠를 때 카드를 아끼지 말고 쓰세요.', enemy: [trackCannon, trackMissile, biped], enemyLevel: 1, enemyWattMult: 0.8, rewardOre: 200, rewardExp: 100 },
@@ -68,23 +68,23 @@ const CH1: Raw[] = [
 ];
 
 const CH2: Raw[] = [
-  { id: 'c2-1', rule: 'rl_fog', no: 1, name: '폐허 입구', hint: '날아다니는 적이 늘었습니다. 어깨형 미사일·대공 포가 있는 설계도를 넣으세요.', enemy: [hoverGat, flyerSwarm, trackGat], enemyLevel: 6, enemyWattMult: 1.1, rewardOre: 260, rewardExp: 140 },
-  { id: 'c2-2', rule: 'rl_gravity', no: 2, name: '떠다니는 파편', hint: '날쌘 비행체는 한 번에 여럿이 옵니다. 광역 대공(폭발형)이 잘 듣습니다.', enemy: [flyerSwarm, hoverMissile, wheelLaser], enemyLevel: 7, enemyWattMult: 1.1, rewardOre: 280, rewardExp: 150 },
-  { id: 'c2-3', rule: 'rl_guard', no: 3, name: '수리 드론', hint: '적 수리 유닛은 먼저 끊어야 합니다. 사거리가 긴 설계도로 뒤를 노리세요.', enemy: [trackDrone, hoverGat, hoverMedic, trackGat], enemyLevel: 7, enemyWattMult: 1.45, rewardOre: 300, rewardExp: 160 },
-  { id: 'c2-4', no: 4, name: '정비 모선', hint: '보스: 모선이 8초마다 적 전체를 20% 고칩니다. 모선을 집중해서 무너뜨리세요.', enemy: [hoverMedic, flyerSwarm, hoverGat, trackFlak], enemyLevel: 8, enemyWattMult: 1.35, rewardOre: 340, rewardExp: 190, boss: 'boss_mother' },
-  { id: 'c2-5', rule: 'rl_storm', no: 5, name: '공중 편대', hint: '적이 수리 스킬을 씁니다. 한 번에 몰아서 큰 피해를 주세요.', enemy: [flyerSwarm, hoverHeavyMissile, hoverMissile, trackFlak], enemyLevel: 8, enemyWattMult: 1.3, rewardOre: 360, rewardExp: 200, enemySkills: ['sk_repair'] },
-  { id: 'c2-6', rule: 'rl_armor', no: 6, name: '정비 공장 중심', hint: '적이 과부하·수리를 번갈아 씁니다. 와트 폭풍이 없으니 카드 순환으로 앞서세요.', enemy: [hoverMedic, hoverHeavyMissile, trackDrone, wheelLaser, trackFlak], enemyLevel: 8, enemyWattMult: 1.5, rewardOre: 390, rewardExp: 220, enemySkills: ['sk_overload', 'sk_repair'] },
-  { id: 'c2-7', no: 7, name: '공중 요새', hint: '보스: 공중 요새는 12초마다 내 공중 유닛을 쓸어 갑니다. 지상 대공 카드가 열쇠입니다.', enemy: [flyerSwarm, hoverHeavyMissile, hoverMedic, trackFlak, wheelLaser], enemyLevel: 9, enemyWattMult: 1.7, rewardOre: 450, rewardExp: 260, boss: 'boss_fortress', enemySkills: ['sk_slow'] },
+  { id: 'c2-1', rule: 'rl_fog', no: 1, name: '폐허 입구', hint: '날아다니는 적이 늘었습니다. 어깨형 미사일·대공 포가 있는 설계도를 넣으세요.', enemy: [hoverGat, flyerSwarm, trackGat], enemyLevel: 6, enemyWattMult: 1.15, rewardOre: 260, rewardExp: 140 },
+  { id: 'c2-2', rule: 'rl_gravity', no: 2, name: '떠다니는 파편', hint: '날쌘 비행체는 한 번에 여럿이 옵니다. 광역 대공(폭발형)이 잘 듣습니다.', enemy: [flyerSwarm, hoverMissile, wheelLaser], enemyLevel: 7, enemyWattMult: 0.87, rewardOre: 280, rewardExp: 150 },
+  { id: 'c2-3', rule: 'rl_guard', no: 3, name: '수리 드론', hint: '적 수리 유닛은 먼저 끊어야 합니다. 사거리가 긴 설계도로 뒤를 노리세요.', enemy: [trackDrone, hoverGat, hoverMedic, trackGat], enemyLevel: 7, enemyWattMult: 0.7, rewardOre: 300, rewardExp: 160 },
+  { id: 'c2-4', no: 4, name: '정비 모선', hint: '보스: 모선이 8초마다 적 전체를 20% 고칩니다. 모선을 집중해서 무너뜨리세요.', enemy: [hoverMedic, flyerSwarm, hoverGat, trackFlak], enemyLevel: 8, enemyWattMult: 0.75, rewardOre: 340, rewardExp: 190, boss: 'boss_mother' },
+  { id: 'c2-5', rule: 'rl_storm', no: 5, name: '공중 편대', hint: '적이 수리 스킬을 씁니다. 한 번에 몰아서 큰 피해를 주세요.', enemy: [flyerSwarm, hoverHeavyMissile, hoverMissile, trackFlak], enemyLevel: 8, enemyWattMult: 1.0, rewardOre: 360, rewardExp: 200, enemySkills: ['sk_repair'] },
+  { id: 'c2-6', rule: 'rl_armor', no: 6, name: '정비 공장 중심', hint: '적이 과부하·수리를 번갈아 씁니다. 와트 폭풍이 없으니 카드 순환으로 앞서세요.', enemy: [hoverMedic, hoverHeavyMissile, trackDrone, wheelLaser, trackFlak], enemyLevel: 8, enemyWattMult: 0.92, rewardOre: 390, rewardExp: 220, enemySkills: ['sk_overload', 'sk_repair'] },
+  { id: 'c2-7', no: 7, name: '공중 요새', hint: '보스: 공중 요새는 12초마다 내 공중 유닛을 쓸어 갑니다. 지상 대공 카드가 열쇠입니다.', enemy: [flyerSwarm, hoverHeavyMissile, hoverMedic, trackFlak, wheelLaser], enemyLevel: 9, enemyWattMult: 0.72, rewardOre: 450, rewardExp: 260, boss: 'boss_fortress', enemySkills: ['sk_slow'] },
 ];
 
 const CH3: Raw[] = [
-  { id: 'c3-1', rule: 'rl_fog', no: 1, name: '요새 외곽', hint: '박격포는 가까운 적을 못 맞힙니다. 달려들어 붙으세요.', enemy: [trackMortar, trackGat, trackCannon], enemyLevel: 6, enemyWattMult: 0.95, rewardOre: 470, rewardExp: 280 },
-  { id: 'c3-2', rule: 'rl_weak', no: 2, name: '포격 진지', hint: '적이 길 하나에 포를 모읍니다. 폭격 스킬로 한꺼번에 처리하세요.', enemy: [trackMortar, fortressCannon, trackMissile], enemyLevel: 6, enemyWattMult: 0.95, rewardOre: 490, rewardExp: 290 },
-  { id: 'c3-3', rule: 'rl_heat', no: 3, name: '근접 돌파', hint: '적 영웅이 돌격해 옵니다. 영웅은 같은 길에 맞서게 하세요.', enemy: [bladeBiped, lanceTrack, trackCannon, trackMortar], enemyLevel: 6, enemyWattMult: 0.9, rewardOre: 510, rewardExp: 300, enemyHero: 'hero_vanguard' },
-  { id: 'c3-4', rule: 'rl_armor', no: 4, name: '레이저 포대', hint: '방어가 높은 적에는 레이저·방어 깎기가 효과적입니다.', enemy: [laserQuad, fortressCannon, trackMissile, bladeBiped], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 540, rewardExp: 320, enemySkills: ['sk_armor'] },
-  { id: 'c3-5', rule: 'rl_heat', no: 5, name: '철벽 라인', hint: '적 저격 영웅이 멀리서 쏩니다. 이동 지시로 길을 옮겨 피하세요.', enemy: [fortressCannon, siegeMortar, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 570, rewardExp: 340, enemyHero: 'hero_sniper', enemySkills: ['sk_overload'] },
-  { id: 'c3-6', rule: 'rl_storm', no: 6, name: '장군의 호위', hint: '적이 영웅과 스킬을 모두 씁니다. 와트를 아껴 맞받아치세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 600, rewardExp: 360, enemyHero: 'hero_medic', enemySkills: ['sk_overload', 'sk_repair'] },
-  { id: 'c3-7', no: 7, name: '요새 장군', hint: '보스: 요새 장군의 박격포 일제가 10초마다 내 유닛 3기를 때립니다. 접근전으로 끝내세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 6, enemyWattMult: 0.95, rewardOre: 700, rewardExp: 420, boss: 'boss_general', enemySkills: ['sk_armor'] },
+  { id: 'c3-1', rule: 'rl_fog', no: 1, name: '요새 외곽', hint: '박격포는 가까운 적을 못 맞힙니다. 달려들어 붙으세요.', enemy: [trackMortar, trackGat, trackCannon], enemyLevel: 6, enemyWattMult: 1.15, rewardOre: 470, rewardExp: 280 },
+  { id: 'c3-2', rule: 'rl_weak', no: 2, name: '포격 진지', hint: '적이 길 하나에 포를 모읍니다. 폭격 스킬로 한꺼번에 처리하세요.', enemy: [trackMortar, fortressCannon, trackMissile], enemyLevel: 6, enemyWattMult: 1.03, rewardOre: 490, rewardExp: 290 },
+  { id: 'c3-3', rule: 'rl_heat', no: 3, name: '근접 돌파', hint: '적 영웅이 돌격해 옵니다. 영웅은 같은 길에 맞서게 하세요.', enemy: [bladeBiped, lanceTrack, trackCannon, trackMortar], enemyLevel: 6, enemyWattMult: 1.0, rewardOre: 510, rewardExp: 300, enemyHero: 'hero_vanguard' },
+  { id: 'c3-4', rule: 'rl_armor', no: 4, name: '레이저 포대', hint: '방어가 높은 적에는 레이저·방어 깎기가 효과적입니다.', enemy: [laserQuad, fortressCannon, trackMissile, bladeBiped], enemyLevel: 7, enemyWattMult: 0.99, rewardOre: 540, rewardExp: 320, enemySkills: ['sk_armor'] },
+  { id: 'c3-5', rule: 'rl_heat', no: 5, name: '철벽 라인', hint: '적 저격 영웅이 멀리서 쏩니다. 이동 지시로 길을 옮겨 피하세요.', enemy: [fortressCannon, siegeMortar, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 0.85, rewardOre: 570, rewardExp: 340, enemyHero: 'hero_sniper', enemySkills: ['sk_overload'] },
+  { id: 'c3-6', rule: 'rl_storm', no: 6, name: '장군의 호위', hint: '적이 영웅과 스킬을 모두 씁니다. 와트를 아껴 맞받아치세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 1.05, rewardOre: 600, rewardExp: 360, enemyHero: 'hero_medic', enemySkills: ['sk_overload', 'sk_repair'] },
+  { id: 'c3-7', no: 7, name: '요새 장군', hint: '보스: 요새 장군의 박격포 일제가 10초마다 내 유닛 3기를 때립니다. 접근전으로 끝내세요.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 6, enemyWattMult: 0.58, rewardOre: 700, rewardExp: 420, boss: 'boss_general', enemySkills: ['sk_armor'] },
 ];
 
 /**
@@ -93,8 +93,8 @@ const CH3: Raw[] = [
  */
 export const OP_DAILY_CAP = 3;
 export const OPS: Stage[] = [
-  { id: 'op-0', op: 0, no: 0, chapter: 3, name: '일요일 · 보스 사냥', hint: '주말 특별 작전: 요새 장군이 나옵니다. 보상이 가장 큽니다.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 0.8, rewardOre: 900, rewardExp: 420, boss: 'boss_general', rule: 'rl_guard' },
-  { id: 'op-1', op: 1, no: 0, chapter: 3, name: '월요일 · 공중 습격', hint: '날아다니는 적이 몰려옵니다. 대공 카드가 열쇠예요.', enemy: [flyerSwarm, hoverMissile, hoverGat, hoverHeavyMissile], enemyLevel: 8, enemyWattMult: 1.4, rewardOre: 520, rewardExp: 260, rule: 'rl_fog', enemySkills: ['sk_slow'] },
+  { id: 'op-0', op: 0, no: 0, chapter: 3, name: '일요일 · 보스 사냥', hint: '주말 특별 작전: 요새 장군이 나옵니다. 보상이 가장 큽니다.', enemy: [siegeMortar, fortressCannon, bladeBiped, laserQuad, trackMissile], enemyLevel: 7, enemyWattMult: 0.5, rewardOre: 900, rewardExp: 420, boss: 'boss_general', rule: 'rl_guard' },
+  { id: 'op-1', op: 1, no: 0, chapter: 3, name: '월요일 · 공중 습격', hint: '날아다니는 적이 몰려옵니다. 대공 카드가 열쇠예요.', enemy: [flyerSwarm, hoverMissile, hoverGat, hoverHeavyMissile], enemyLevel: 8, enemyWattMult: 1.05, rewardOre: 520, rewardExp: 260, rule: 'rl_fog', enemySkills: ['sk_slow'] },
   { id: 'op-2', op: 2, no: 0, chapter: 3, name: '화요일 · 중장갑 행군', hint: '단단한 적이 천천히 밀려옵니다. 관통·방어 깎기가 좋습니다.', enemy: [trackCannon, fortressCannon, trackMissile, trackFlak], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 520, rewardExp: 260, rule: 'rl_armor', enemySkills: ['sk_armor'] },
   { id: 'op-3', op: 3, no: 0, chapter: 3, name: '수요일 · 포격 지대', hint: '박격포가 길을 덮습니다. 포탑이 약해져 있어 왕관을 노리세요.', enemy: [trackMortar, siegeMortar, trackCannon, laserQuad], enemyLevel: 7, enemyWattMult: 1.0, rewardOre: 540, rewardExp: 270, rule: 'rl_weak' },
   { id: 'op-4', op: 4, no: 0, chapter: 3, name: '목요일 · 와트 폭풍', hint: '와트가 빠르게 찼다 느려집니다. 몰아서 내는 타이밍을 잡으세요.', enemy: [biped, hoverGat, trackGat, flyerSwarm, bladeBiped], enemyLevel: 7, enemyWattMult: 1.15, rewardOre: 540, rewardExp: 270, rule: 'rl_storm' },

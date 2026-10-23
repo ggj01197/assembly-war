@@ -13,7 +13,7 @@ import { stageLabel } from '../data/stages';
 /** 카드를 끌어다 놓기(클래시 로얄식): 시작·이동·놓기·취소. 좌표는 화면(클라이언트) 좌표 */
 export type DragPhase = 'start' | 'move' | 'end' | 'cancel';
 export interface HudHandlers { onDrag(phase: DragPhase, card: number, x: number, y: number): void; onSelect(i: number): void; onSkill(slot: number): void; onHero(): void; onHeroSkill(): void; onQuit(): void }
-/** 지금 눌려 있는 것: 카드 / 길을 고를 스킬 / 영웅(출격·이동) */
+/** 지금 눌려 있는 것: 카드 / 지점을 고를 스킬 / 영웅 출격 */
 export interface HudSel { card: number | null; skill: number | null; hero: boolean }
 
 export class BattleHud {
