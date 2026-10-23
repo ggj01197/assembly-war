@@ -146,7 +146,7 @@ export class BattleHud {
     const rem = Math.ceil(b.remaining);
     this.timerEl.textContent = `${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
     this.timerEl.classList.toggle('ot', b.overtime);
-    if (this.crownEl) this.crownEl.innerHTML = b.survival || !b.towersOn ? '' : `<b class="me">내 ${'★'.repeat(b.crowns(0)) || '☆'}</b><b class="foe">${'★'.repeat(b.crowns(1)) || '☆'} 적</b>`;
+    if (this.crownEl) this.crownEl.innerHTML = b.survival ? `<b class="me">웨이브 ${b.wave + 1}</b>` : !b.towersOn ? '' : `<b class="me">내 ${'★'.repeat(b.crowns(0)) || '☆'}</b><b class="foe">${'★'.repeat(b.crowns(1)) || '☆'} 적</b>`;
     if (b.survival && this.subEl) this.subEl.textContent = `5분 버티기 · 웨이브 ${b.wave + 1}`;
     const w = b.watt[0];
     this.wattFill.style.width = `${(w / WATT_POOL) * 100}%`;

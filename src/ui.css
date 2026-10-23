@@ -464,3 +464,7 @@ i.brief { display: block; font-style: normal; color: #9fd9ff; font-weight: 700; 
 .bt-mid small { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .bt-hint { top: calc(var(--safe-top) + 70px); }
 @media (max-height: 640px) { .bt-top { height: auto; } .bt-mid b { font-size: 22px; } }
+/* 시간 상자를 세로로 좁게: 좁은 화면에서도 가운데(적 메인 타워)를 가리지 않는다 */
+.crowns { flex-direction: column; align-items: flex-end; gap: 2px; }
+.bt-mid small { display: none; }
+.bt-mid { min-width: 0; }
