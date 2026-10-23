@@ -9,9 +9,9 @@ export type ModCategory = 'atk' | 'def' | 'eco';
 export interface Mods {
   dmg: number; rate: number; range: number; pierce: number; towerDmg: number; hero: number;
   hp: number; armor: number; baseGuard: number; regen: number;
-  wattRate: number; discount: number; speed: number; skillCd: number; capture: number;
+  wattRate: number; discount: number; speed: number; skillCd: number; sight: number;
 }
-export const zeroMods = (): Mods => ({ dmg: 0, rate: 0, range: 0, pierce: 0, towerDmg: 0, hero: 0, hp: 0, armor: 0, baseGuard: 0, regen: 0, wattRate: 0, discount: 0, speed: 0, skillCd: 0, capture: 0 });
+export const zeroMods = (): Mods => ({ dmg: 0, rate: 0, range: 0, pierce: 0, towerDmg: 0, hero: 0, hp: 0, armor: 0, baseGuard: 0, regen: 0, wattRate: 0, discount: 0, speed: 0, skillCd: 0, sight: 0 });
 
 /** 고른 즉시 한 번 일어나는 일 (수치 누적과 별개) */
 export type ModInstant = 'repair' | 'surge' | 'towerHp';
@@ -42,7 +42,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'md_surge', name: '비상 전원', desc: '지금 와트 +4', cat: 'eco', icon: '🔌', instant: 'surge' },
   { id: 'md_speed', name: '추진기 튜닝', desc: '이동 속도 +12%', cat: 'eco', icon: '🚀', mods: { speed: 0.12 } },
   { id: 'md_skill', name: '스킬 가속', desc: '스킬 재사용 −25%', cat: 'eco', icon: '⏱', mods: { skillCd: 0.25 } },
-  { id: 'md_capture', name: '점령 전문', desc: '거점 점령이 빨라짐(5초 → 3초)', cat: 'eco', icon: '🚩', mods: { capture: 0.67 } },
+  { id: 'md_scout', name: '정찰 장치', desc: '유닛 인식 거리 +30% — 더 멀리서 적을 발견', cat: 'eco', icon: '📡', mods: { sight: 0.30 } },
 ];
 
 const BY_ID = new Map(MODULES.map(m => [m.id, m]));

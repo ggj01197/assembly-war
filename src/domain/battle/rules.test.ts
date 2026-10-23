@@ -29,7 +29,7 @@ describe('작전 변형 규칙', () => {
 
   it('영웅 봉쇄: 출격 불가, 봇도 와트를 모으느라 멈추지 않는다', () => {
     const b = new Battle(deck, deck, PARTS, 3, { bots: [false, false], rule: 'rl_nohero', heroes: ['hero_vanguard', 'hero_vanguard'] });
-    b.watt[0] = 10; expect(b.deployHero(0, 1)).toBe(false); expect(b.heroDeploys[0]).toBe(0);
+    b.watt[0] = 10; expect(b.deployHero(0, 9, 10)).toBe(false); expect(b.heroDeploys[0]).toBe(0);
     const c = new Battle(deck, deck, PARTS, 3, { rule: 'rl_nohero', heroes: ['hero_vanguard', 'hero_vanguard'] });
     for (let i = 0; i < 30 * TICK_HZ; i++) c.step();
     expect(c.spawned[0]).toBeGreaterThan(2);

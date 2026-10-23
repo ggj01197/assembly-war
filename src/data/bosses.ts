@@ -25,7 +25,7 @@ export const BOSSES: BossDef[] = [
     id: 'boss_fortress', name: '공중 요새', title: '2장 보스', scale: 1.9, spawnAt: 45,
     build: { legs: 'legs_flyer', body: 'body_shoulder_platform', weapon: 'wpn_flak_missile' },
     stats: { hp: 3000, armor: 25, speed: 1, sight: 8, dmg: 40, range: 8, rate: 0.8, target: 'both', move: 'air', family: 'flak', splash: 4, pierce: 0, minRange: 0 },
-    ability: { kind: 'airstrike', every: 12, desc: '12초마다 내 공중 유닛 전체에 피해 60, 같은 길 지상에 25' },
+    ability: { kind: 'airstrike', every: 12, desc: '12초마다 내 공중 유닛 전체에 피해 60, 보스 가까이 지상에 25' },
   },
   {
     id: 'boss_general', name: '요새 장군', title: '3장 보스', scale: 2, spawnAt: 40,

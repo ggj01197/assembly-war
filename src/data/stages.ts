@@ -62,7 +62,7 @@ const CH1: Raw[] = [
   { id: 'c1-2', no: 2, name: '세 갈래 길', hint: '적이 몰린 길에 유닛을 놓아 막으세요.', enemy: [biped, trackGat], enemyLevel: 1, enemyWattMult: 0.6, rewardOre: 140, rewardExp: 70 },
   { id: 'c1-3', no: 3, name: '첫 조립', hint: '격납고의 「조립」에서 설계도를 바꿔 오면 더 강해집니다.', enemy: [trackGat, trackCannon], enemyLevel: 1, enemyWattMult: 0.65, rewardOre: 160, rewardExp: 80 },
   { id: 'c1-4', no: 4, name: '하늘의 적', hint: '공중 유닛은 어깨형 미사일만 맞힙니다. 대공 카드를 준비하세요.', enemy: [hoverGat, hoverMissile, trackGat], enemyLevel: 1, enemyWattMult: 0.7, rewardOre: 180, rewardExp: 90 },
-  { id: 'c1-5', rule: 'rl_storm', no: 5, name: '중앙 거점', hint: '가운데 길 중앙에 5초 머물면 와트 충전이 1.5배가 됩니다.', enemy: [trackCannon, trackMissile, biped], enemyLevel: 1, enemyWattMult: 0.8, rewardOre: 200, rewardExp: 100 },
+  { id: 'c1-5', rule: 'rl_storm', no: 5, name: '중앙 교차로', hint: '와트가 번갈아 빠르게·느리게 충전됩니다. 빠를 때 카드를 아끼지 말고 쓰세요.', enemy: [trackCannon, trackMissile, biped], enemyLevel: 1, enemyWattMult: 0.8, rewardOre: 200, rewardExp: 100 },
   { id: 'c1-6', rule: 'rl_heat', no: 6, name: '부대 편성', hint: '6장의 설계도를 섞어 쓰세요. 한 종류만 내면 상성에 집니다.', enemy: [biped, trackGat, trackCannon, hoverGat, hoverMissile], enemyLevel: 2, enemyWattMult: 0.9, rewardOre: 230, rewardExp: 120 },
   { id: 'c1-7', rule: 'rl_weak', no: 7, name: '최종 자격 시험', hint: '지금까지 배운 것을 모두 써서 이기세요.', enemy: [biped, trackGat, trackCannon, trackMissile, hoverGat, hoverMissile], enemyLevel: 2, enemyWattMult: 1.0, rewardOre: 300, rewardExp: 160 },
 ];
@@ -73,7 +73,7 @@ const CH2: Raw[] = [
   { id: 'c2-3', rule: 'rl_guard', no: 3, name: '수리 드론', hint: '적 수리 유닛은 먼저 끊어야 합니다. 사거리가 긴 설계도로 뒤를 노리세요.', enemy: [trackDrone, hoverGat, hoverMedic, trackGat], enemyLevel: 7, enemyWattMult: 1.45, rewardOre: 300, rewardExp: 160 },
   { id: 'c2-4', no: 4, name: '정비 모선', hint: '보스: 모선이 8초마다 적 전체를 20% 고칩니다. 모선을 집중해서 무너뜨리세요.', enemy: [hoverMedic, flyerSwarm, hoverGat, trackFlak], enemyLevel: 8, enemyWattMult: 1.35, rewardOre: 340, rewardExp: 190, boss: 'boss_mother' },
   { id: 'c2-5', rule: 'rl_storm', no: 5, name: '공중 편대', hint: '적이 수리 스킬을 씁니다. 한 번에 몰아서 큰 피해를 주세요.', enemy: [flyerSwarm, hoverHeavyMissile, hoverMissile, trackFlak], enemyLevel: 8, enemyWattMult: 1.3, rewardOre: 360, rewardExp: 200, enemySkills: ['sk_repair'] },
-  { id: 'c2-6', rule: 'rl_armor', no: 6, name: '정비 공장 중심', hint: '적이 과부하·수리를 번갈아 씁니다. 거점을 먼저 잡아 와트를 앞서세요.', enemy: [hoverMedic, hoverHeavyMissile, trackDrone, wheelLaser, trackFlak], enemyLevel: 8, enemyWattMult: 1.5, rewardOre: 390, rewardExp: 220, enemySkills: ['sk_overload', 'sk_repair'] },
+  { id: 'c2-6', rule: 'rl_armor', no: 6, name: '정비 공장 중심', hint: '적이 과부하·수리를 번갈아 씁니다. 와트 폭풍이 없으니 카드 순환으로 앞서세요.', enemy: [hoverMedic, hoverHeavyMissile, trackDrone, wheelLaser, trackFlak], enemyLevel: 8, enemyWattMult: 1.5, rewardOre: 390, rewardExp: 220, enemySkills: ['sk_overload', 'sk_repair'] },
   { id: 'c2-7', no: 7, name: '공중 요새', hint: '보스: 공중 요새는 12초마다 내 공중 유닛을 쓸어 갑니다. 지상 대공 카드가 열쇠입니다.', enemy: [flyerSwarm, hoverHeavyMissile, hoverMedic, trackFlak, wheelLaser], enemyLevel: 9, enemyWattMult: 1.7, rewardOre: 450, rewardExp: 260, boss: 'boss_fortress', enemySkills: ['sk_slow'] },
 ];
 

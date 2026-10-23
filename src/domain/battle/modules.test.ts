@@ -64,15 +64,15 @@ describe('지휘 모듈', () => {
 
   it('강화 장갑: 이미 나온 유닛도 체력이 늘고 새 유닛도 늘어난다', () => {
     const b = new Battle(deck(), deck(), PARTS, 5, { bots: [false, false], modules: true });
-    b.watt[0] = 10; b.spawn(0, 0, 1); const before = b.units[0].maxHp;
+    b.watt[0] = 10; b.spawn(0, 0, 9, 10); const before = b.units[0].maxHp;
     b.offer = { team: 0, index: 0, ids: ['md_hp'] }; b.choose(0, 'md_hp');
     expect(b.units[0].maxHp).toBe(Math.round(before * 1.15)); expect(b.units[0].hp).toBe(b.units[0].maxHp);
-    b.watt[0] = 10; b.spawn(0, 0, 0); expect(b.units[1].maxHp).toBe(Math.round(before * 1.15));
+    b.watt[0] = 10; b.spawn(0, 0, 5, 12); expect(b.units[1].maxHp).toBe(Math.round(before * 1.15));
   });
 
   it('긴급 정비·방벽 강화: 유닛·기지 회복, 기지가 받는 피해 감소', () => {
     const b = new Battle(deck(), deck(), PARTS, 5, { bots: [false, false], modules: true });
-    b.watt[0] = 10; b.spawn(0, 0, 1); b.units[0].hp = 10; b.baseHp[0] = 500;
+    b.watt[0] = 10; b.spawn(0, 0, 9, 10); b.units[0].hp = 10; b.baseHp[0] = 500;
     b.offer = { team: 0, index: 0, ids: ['md_repair'] }; b.choose(0, 'md_repair');
     expect(b.units[0].hp).toBeGreaterThan(10); expect(b.baseHp[0]).toBe(600);
     b.baseHp[0] = BASE_HP; b.offer = { team: 0, index: 1, ids: ['md_guard'] }; b.choose(0, 'md_guard');
@@ -83,8 +83,8 @@ describe('지휘 모듈', () => {
     const dmg = (mod: boolean) => {
       const b = new Battle(deck(), deck(), PARTS, 5, { bots: [false, false], modules: true, towers: false });
       if (mod) { b.offer = { team: 0, index: 0, ids: ['md_dmg'] }; b.choose(0, 'md_dmg'); }
-      b.watt[0] = 10; b.spawn(0, 0, 1); b.watt[1] = 10; b.spawn(1, 0, 1);
-      const [a, e] = [b.units[0], b.units[1]]; a.pos = 49; e.pos = 51; a.prev = 49; e.prev = 51;
+      b.watt[0] = 10; b.spawn(0, 0, 4.5, 12); b.watt[1] = 10; b.spawn(1, 0, 4.5, 20);
+      const [a, e] = [b.units[0], b.units[1]]; a.y = 12; e.x = 4.5; e.y = 13.2; a.py = 12; e.px = 4.5; e.py = 13.2; e.stats = { ...e.stats, speed: 0.001 }; a.cd = 0; e.cd = 99999;
       const hp0 = e.hp; b.step(); return hp0 - e.hp;
     };
     expect(dmg(true)).toBeGreaterThan(dmg(false));
@@ -107,8 +107,8 @@ describe('클래시식 손패 순환', () => {
   it('손에 없는 카드는 못 내고, 낸 카드는 맨 뒤로 가며 다음 카드가 그 자리에 들어온다', () => {
     const b = new Battle(d6(), d6(), PARTS, 11, { bots: [false, false], hand: true });
     const out = b.queue[0][0], outTail = b.queue[0][1]; b.watt[0] = 10;
-    expect(b.spawn(0, out, 1)).toBe(false);          // 손에 없다
-    const played = b.hand[0][2]; expect(b.spawn(0, played, 1)).toBe(true);
+    expect(b.spawn(0, out, 9, 10)).toBe(false);          // 손에 없다
+    const played = b.hand[0][2]; expect(b.spawn(0, played, 9, 10)).toBe(true);
     expect(b.hand[0][2]).toBe(out);                  // 같은 자리에 다음 카드
     expect(b.queue[0]).toEqual([outTail, played]);   // 낸 카드는 맨 뒤
   });
@@ -116,7 +116,7 @@ describe('클래시식 손패 순환', () => {
     const a = new Battle(d6(), d6(), PARTS, 11, { hand: true }), b = new Battle(d6(), d6(), PARTS, 11, { hand: true });
     expect(a.hand).toEqual(b.hand);
     const off = new Battle(d6(), d6(), PARTS, 11, { bots: [false, false] }); off.watt[0] = 10;
-    expect(off.spawn(0, 5, 1)).toBe(true);
+    expect(off.spawn(0, 5, 9, 10)).toBe(true);
   });
   it('봇은 손패 안에서만 카드를 내고 끝까지 막히지 않는다', () => {
     const b = new Battle(d6(), d6(), PARTS, 4, { hand: true });

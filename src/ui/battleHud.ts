@@ -20,7 +20,7 @@ export class BattleHud {
   readonly el: HTMLElement;
   private cards: HTMLButtonElement[] = [];
   private timerEl!: HTMLElement;
-  private wattFill!: HTMLElement; private wattNum!: HTMLElement; private hintEl!: HTMLElement; private toastEl!: HTMLElement; private pointEl!: HTMLElement;
+  private wattFill!: HTMLElement; private wattNum!: HTMLElement; private hintEl!: HTMLElement; private toastEl!: HTMLElement;
   private quitArmed = 0;
   private comboT: ReturnType<typeof setTimeout> | null = null;
   private offerEl: HTMLElement | null = null; private offerT: ReturnType<typeof setInterval> | null = null;
@@ -44,7 +44,6 @@ export class BattleHud {
       <header class="bt-top">
         <button class="quit" type="button" aria-label="나가기"><span aria-hidden="true">‹</span><small>나가기</small></button>
         <div class="bt-mid"><b id="btTime">3:00</b><i class="crowns" id="btCrowns"></i><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}${battle.rule ? ` · ${battle.rule.icon} ${esc(battle.rule.name)}` : ''}</small></div>
-        <div class="bt-point" id="btPoint" title="중앙 거점">거점</div>
       </header>
       <div class="bt-hint" id="btHint">${battle.rule ? `<b>${battle.rule.icon} ${esc(battle.rule.name)}</b> ${esc(battle.rule.desc)}<br>` : ''}${esc(stage.hint)}</div>
       <div class="bt-toast" id="btToast"></div>
@@ -63,7 +62,7 @@ export class BattleHud {
       </footer>`;
     const q = <T extends HTMLElement>(s: string) => this.el.querySelector(s) as T;
     this.timerEl = q('#btTime');
-    this.wattFill = q('#btWatt'); this.wattNum = q('#btWattN'); this.hintEl = q('#btHint'); this.toastEl = q('#btToast'); this.pointEl = q('#btPoint');
+    this.wattFill = q('#btWatt'); this.wattNum = q('#btWattN'); this.hintEl = q('#btHint'); this.toastEl = q('#btToast');
     this.cards = Array.from(this.el.querySelectorAll<HTMLButtonElement>('.card[data-i]'));
     this.cards.forEach(c => {
       let sx = 0, sy = 0, down = false, dragging = false, justDragged = false;
@@ -152,7 +151,6 @@ export class BattleHud {
     const w = b.watt[0];
     this.wattFill.style.width = `${(w / WATT_POOL) * 100}%`;
     this.wattNum.textContent = String(Math.floor(w));
-    this.pointEl.className = 'bt-point' + (b.controller === 0 ? ' mine' : b.controller === 1 ? ' enemy' : '');
     this.cards.forEach((c, k) => {
       let i = Number(c.dataset.i);
       if (this.handOn && b.hand[0][k] !== undefined && b.hand[0][k] !== i) {   // 낸 자리에 다음 카드가 들어온다
@@ -185,13 +183,12 @@ export class BattleHud {
       const u = b.heroUnit(0);
       let tx: string, cls: string;
       if (b.rule?.id === 'rl_nohero') { tx = '봉쇄'; cls = 'dead'; }
-      else if (!u) { if (hs.respawn > 0) { tx = `${Math.ceil(hs.respawn / TICK_HZ)}초`; cls = 'dead'; } else { tx = `출격 ${HERO_WATT}`; cls = w >= HERO_WATT - 1e-9 ? 'ready' : 'short'; } }
-      else if (u.ghost > 0) { tx = '이동 중'; cls = 'deployed'; }
-      else { tx = sel.hero ? '길 선택' : u.moveCd > 0 ? `이동 ${Math.ceil(u.moveCd / TICK_HZ)}` : '이동'; cls = 'deployed'; }
+      else if (!u) { if (hs.respawn > 0) { tx = `${Math.ceil(hs.respawn / TICK_HZ)}초`; cls = 'dead'; } else { tx = sel.hero ? '자리 선택' : `출격 ${HERO_WATT}`; cls = w >= HERO_WATT - 1e-9 ? 'ready' : 'short'; } }
+      else { tx = '출격 중'; cls = 'deployed'; }
       this.heroTx.textContent = tx;
       this.heroBtn.className = 'hb ' + cls + (sel.hero ? ' on' : '');
       (this.heroBtn.querySelector('.cd') as HTMLElement).style.height = !u && hs.respawn > 0 ? `${(hs.respawn / (40 * TICK_HZ)) * 100}%` : '0%';
-      const ready = !!u && u.ghost === 0 && hs.skillCd === 0;
+      const ready = !!u && hs.skillCd === 0;
       this.heroSkillBtn.className = 'hs' + (ready ? ' ready' : '') + (!u ? ' off' : '');
       (this.heroSkillBtn.querySelector('.cd') as HTMLElement).style.height = `${(hs.skillCd / (HERO_SKILL_COOLDOWN_SEC * TICK_HZ)) * 100}%`;
     }

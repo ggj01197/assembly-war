@@ -21,7 +21,9 @@ const shot = async n => { await page.screenshot({ path: `${OUT}/${W}x${H}_b_${n}
 await page.waitForTimeout(900); await shot('0_intro');
 const cards = await page.locator('.card[data-i]').all();
 let n = 0;
-const place = async (ci, lane) => { await cards[ci].click().catch(() => {}); await page.mouse.click(((lane + 0.5) / 3) * W * 0.9 + W * 0.05, H - 280); };
+// 아레나 좌표(타일)에 놓기: 내 진영(y 1~13), 가로 0~18
+const spots = [[4.5, 12], [13.5, 12], [9, 11], [4.5, 10], [13.5, 10], [9, 12.5]];
+const place = async (ci, k) => { const [xt, yt] = spots[k % spots.length]; await cards[ci].click().catch(() => {}); await page.mouse.click(W * (0.05 + 0.9 * (xt / 18)), (H - 198) - (yt / 32) * (H - 198 - 114)); };
 await place(0, 1); await page.waitForTimeout(120); await shot('1_spawn_a'); await page.waitForTimeout(250); await shot('2_spawn_b');
 for (const t of [4000, 4000, 5000, 6000]) {
   await place(n % 3, n % 3); n++;

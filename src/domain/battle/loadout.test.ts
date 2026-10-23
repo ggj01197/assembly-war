@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Battle, BASE_HP, TICK_HZ, type Deck } from './sim';
+import { Battle, BASE_HP, TICK_HZ, basePos, type Deck } from './sim';
 import { PARTS } from '../../data/parts';
 import { HEROES, SKILLS, HERO_WATT, HERO_RESPAWN_SEC, repairLoadout, defaultLoadout } from '../loadout';
 import { assemble } from '../assemble';
@@ -30,17 +30,17 @@ describe('스킬 8종', () => {
     expect(b.castSkill(0, 0)).toBe(true);
   });
 
-  it('폭격은 고른 길의 적에게만 80 피해를 준다', () => {
-    const b = mk(['sk_bomb']); fill(b, 1); b.spawn(1, 0, 0); b.spawn(1, 0, 2);
+  it('폭격은 고른 지점 둘레의 적에게만 80 피해를 준다', () => {
+    const b = mk(['sk_bomb']); fill(b, 1); b.spawn(1, 0, 4.5, 19); b.spawn(1, 0, 13.5, 19);
     const [a, c] = b.units;
     fill(b);
-    expect(b.castSkill(0, 0)).toBe(false);          // 길 필요
-    expect(b.castSkill(0, 0, 2)).toBe(true);
+    expect(b.castSkill(0, 0)).toBe(false);          // 지점 필요
+    expect(b.castSkill(0, 0, 13.5, 19)).toBe(true);
     expect(a.hp).toBe(a.maxHp); expect(c.hp).toBe(c.maxHp - 80);
   });
 
   it('긴급 수리는 내 유닛 체력을 25% 올리고 최대를 넘지 않는다', () => {
-    const b = mk(['sk_repair']); fill(b); b.spawn(0, 0, 0); fill(b);
+    const b = mk(['sk_repair']); fill(b); b.spawn(0, 0, 9, 10); fill(b);
     const u = b.units[0]; u.hp = 50;
     b.castSkill(0, 0);
     expect(u.hp).toBeCloseTo(50 + u.maxHp * 0.25, 5);
@@ -60,8 +60,8 @@ describe('스킬 8종', () => {
     const hit = (shield: boolean) => {
       const b = mkShield(shield); fill(b);
       if (shield) b.castSkill(0, 0);
-      b.watt[1] = 10; b.spawn(1, 0, 1);
-      const u = b.units[0]; u.pos = 3; u.prev = 3; // 내 기지 앞
+      b.watt[1] = 10; b.spawn(1, 0, 9, 20);
+      const u = b.units[0]; const bp = basePos(0); u.x = bp.x; u.y = bp.y + 2.5; u.px = u.x; u.py = u.y; // 내 기지 앞
       run(b, 3);
       return BASE_HP - b.baseHp[0];
     };
@@ -74,14 +74,14 @@ describe('스킬 8종', () => {
     const mv = (slow: boolean) => {
       const b = mk(slow ? ['sk_slow'] : []); fill(b); fill(b, 1);
       if (slow) b.castSkill(0, 0);
-      b.spawn(1, 0, 1); const u = b.units[0]; const p0 = u.pos; run(b, 2);
-      return p0 - u.pos;
+      b.spawn(1, 0, 4.5, 20); const u = b.units[0]; const y0 = u.y; run(b, 2);
+      return y0 - u.y;
     };
     expect(mv(true)).toBeCloseTo(mv(false) * 0.6, 1);
   });
 
   it('방어 깎기는 방어 −20 을 6초 준다 (0 미만으로 내려가지 않는다)', () => {
-    const b = mk(['sk_armor']); fill(b); fill(b, 1); b.spawn(1, 1, 1); // 탑형 대포: 방어 30
+    const b = mk(['sk_armor']); fill(b); fill(b, 1); b.spawn(1, 1, 9, 20); // 탑형 대포: 방어 30
     const e = b.units[0];
     expect(b['armorOf'](e)).toBe(30);
     b.castSkill(0, 0);
@@ -103,52 +103,46 @@ describe('스킬 8종', () => {
 describe('영웅 3종', () => {
   it('와트 6 으로 출격하고, 죽으면 40초 뒤에야 다시 나갈 수 있다', () => {
     const b = mk([], 'hero_vanguard'); fill(b);
-    expect(b.deployHero(0, 1)).toBe(true);
+    expect(b.deployHero(0, 9, 10)).toBe(true);
     expect(b.watt[0]).toBeCloseTo(10 - HERO_WATT, 5);
-    expect(b.deployHero(0, 1)).toBe(false);          // 이미 출격 중
+    expect(b.deployHero(0, 9, 10)).toBe(false);          // 이미 출격 중
     const u = b.heroUnit(0)!; u.hp = 0;
     b.step();
     expect(b.heroUnit(0)).toBeNull();
-    fill(b); expect(b.deployHero(0, 1)).toBe(false); // 재출격 대기
+    fill(b); expect(b.deployHero(0, 9, 10)).toBe(false); // 재출격 대기
     run(b, HERO_RESPAWN_SEC + 0.5); fill(b);
-    expect(b.deployHero(0, 1)).toBe(true);
+    expect(b.deployHero(0, 9, 10)).toBe(true);
   });
 
-  it('길 옮기기 지시: 1.5초 동안 무적·공격 불가, 끝나면 새 길에, 바로는 다시 못 옮긴다', () => {
-    const b = mk([], 'hero_vanguard'); fill(b); b.deployHero(0, 0);
-    const u = b.heroUnit(0)!;
-    expect(b.heroMove(0, 0)).toBe(false);            // 같은 길
-    expect(b.heroMove(0, 2)).toBe(true);
-    expect(u.ghost).toBeGreaterThan(0);
-    run(b, 1.6);
-    expect(u.lane).toBe(2); expect(u.ghost).toBe(0);
-    expect(b.heroMove(0, 1)).toBe(false);            // 5초 재지시 대기
-    run(b, 5.1);
-    expect(b.heroMove(0, 1)).toBe(true);
+  it('출격 자리는 내 진영 어디든, 강·적 진영·포탑 자리는 안 된다', () => {
+    const b = mk([], 'hero_vanguard'); fill(b);
+    expect(b.deployHero(0, 9, 15.5)).toBe(false); expect(b.deployHero(0, 9, 22)).toBe(false);
+    expect(b.deployHero(0, 3, 11)).toBe(true);
+    const u = b.heroUnit(0)!; expect(u.x).toBe(3); expect(u.y).toBe(11);
   });
 
-  it('돌격형 돌진은 앞으로 8칸 가며 적에게 피해를 준다', () => {
-    const b = mk([], 'hero_vanguard'); fill(b); fill(b, 1); b.deployHero(0, 1); b.spawn(1, 0, 1);
+  it('돌격형 돌진은 앞으로 2.4칸 뛰며 지나는 지상 적에게 피해를 준다', () => {
+    const b = mk([], 'hero_vanguard'); fill(b); fill(b, 1); b.deployHero(0, 4.5, 12); b.spawn(1, 0, 4.5, 20);
     const h = b.heroUnit(0)!, e = b.units.find(u => u.team === 1)!;
-    h.pos = 40; h.prev = 40; e.pos = 46; e.prev = 46; e.cd = 999; h.cd = 999;
+    e.x = 4.5; e.y = 13.5; e.px = e.x; e.py = e.y; e.cd = 999; h.cd = 999;
     const hp0 = e.hp;
     expect(b.castHeroSkill(0)).toBe(true);
-    expect(h.pos).toBe(48);
+    expect(h.y).toBeCloseTo(14.4, 5);
     expect(e.hp).toBeLessThan(hp0);
     expect(b.castHeroSkill(0)).toBe(false);          // 쿨다운
   });
 
-  it('사격형 일제 사격은 가까운 적 4기까지만, 지원형은 같은 길 아군 35% 치료', () => {
-    const s = mk([], 'hero_sniper'); fill(s); fill(s, 1); s.deployHero(0, 1);
-    for (let i = 0; i < 5; i++) { fill(s, 1); s.spawn(1, 0, 1); }
-    s.units.filter(u => u.team === 1).forEach((u, i) => { u.pos = 60 + i * 3; u.prev = u.pos; u.cd = 999; });
-    s.heroUnit(0)!.pos = 50; s.heroUnit(0)!.cd = 999;
+  it('사격형 일제 사격은 가까운 적 4기까지만, 지원형은 가까운 아군 35% 치료', () => {
+    const s = mk([], 'hero_sniper'); fill(s); fill(s, 1); s.deployHero(0, 9, 11);
+    for (let i = 0; i < 5; i++) { fill(s, 1); s.spawn(1, 0, 2 + i * 3, 20); }
+    s.units.filter(u => u.team === 1).forEach((u, i) => { u.y = 12 + i; u.px = u.x; u.py = u.y; u.cd = 999; });
+    s.heroUnit(0)!.cd = 999;
     const before = s.units.filter(u => u.team === 1).map(u => u.hp);
     s.castHeroSkill(0);
     const hit = s.units.filter(u => u.team === 1).filter((u, i) => u.hp < before[i]).length;
     expect(hit).toBe(4);
 
-    const m = mk([], 'hero_medic'); fill(m); m.deployHero(0, 1); m.spawn(0, 0, 1);
+    const m = mk([], 'hero_medic'); fill(m); m.deployHero(0, 9, 11); m.spawn(0, 0, 7, 12);
     const ally = m.units.find(u => !u.hero)!; ally.hp = 10;
     m.castHeroSkill(0);
     expect(ally.hp).toBeCloseTo(10 + ally.maxHp * 0.35, 5);
@@ -157,9 +151,9 @@ describe('영웅 3종', () => {
 
   it('영웅은 동시 유닛 상한(12)에 들어가지 않는다', () => {
     const b = mk([], 'hero_vanguard');
-    for (let i = 0; i < 12; i++) { fill(b); b.spawn(0, 0, i % 3); }
-    fill(b); expect(b.spawn(0, 0, 0)).toBe(false);
-    expect(b.deployHero(0, 0)).toBe(true);
+    for (let i = 0; i < 12; i++) { fill(b); expect(b.spawn(0, 0, 1.5 + (i % 6) * 3, 11 + Math.floor(i / 6) * 2)).toBe(true); }
+    fill(b); expect(b.spawn(0, 0, 9, 13)).toBe(false);
+    expect(b.deployHero(0, 9, 13)).toBe(true);
   });
 });
 

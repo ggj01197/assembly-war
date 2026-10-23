@@ -42,7 +42,7 @@ describe('일일 임무 3개', () => {
 
   it('전투 결과 통계(생산·스킬·영웅·와트)가 Battle 에서 나온다', () => {
     const b = new Battle(deck(biped), deck(biped), PARTS, 5, { bots: [false, false], skills: [['sk_overload'], []], heroes: ['hero_vanguard', null] });
-    b.watt[0] = 10; b.spawn(0, 0, 1); b.castSkill(0, 0); b.watt[0] = 10; b.deployHero(0, 0);
+    b.watt[0] = 10; b.spawn(0, 0, 9, 8); b.castSkill(0, 0); b.watt[0] = 10; b.deployHero(0, 9, 10);
     const r = b.result();
     expect(r.skillUses[0]).toBe(1); expect(r.heroDeploys[0]).toBe(1); expect(r.wattSpent[0]).toBe(3 + 3 + 6); expect(r.spawned[0]).toBe(1);
   });
@@ -109,7 +109,7 @@ describe('분해 · 저장 보정 · 이어하기', () => {
   });
   it('5분 버티기 이어하기: 기지 절반 체력·30초 보호막, 기지 앞 적 제거', () => {
     const b = new Battle(deck(biped), deck(biped), PARTS, 3, { bots: [false, false], survival: true, towers: false });
-    b.watt[1] = 10; b.spawn(1, 0, 1); b.units[0].pos = 10; b.baseHp[0] = 0; b.over = true;
+    b.watt[1] = 10; b.spawn(1, 0, 9, 24); b.units[0].y = 6; b.units[0].py = 6; b.baseHp[0] = 0; b.over = true;
     b.revive();
     expect(b.over).toBe(false); expect(b.baseHp[0]).toBe(500); expect(b.eff.shield[0]).toBeGreaterThan(0); expect(b.units.length).toBe(0); expect(b.continued).toBe(1);
   });
