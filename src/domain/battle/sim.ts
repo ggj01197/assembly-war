@@ -878,8 +878,11 @@ export class Battle {
     this.units.splice(0, this.units.length, ...this.units.filter(u => u.hp > 0));
   }
 
+  /** 왕관이 같을 때의 판정용: 살아 있는 포탑 체력 합 (포탑이 없는 연습 모드는 0) */
+  private towerHpSum(team: Team): number { return this.towersOn ? this.towers[team].reduce((a, t) => a + Math.max(0, t.hp), 0) : 0; }
+
   result(): BattleResult {
-    const winner: Team | -1 = this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] <= 0 || this.baseHp[1] <= 0 ? (this.baseHp[0] > this.baseHp[1] ? 0 : 1) : this.crowns(0) !== this.crowns(1) ? (this.crowns(0) > this.crowns(1) ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
+    const winner: Team | -1 = this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] <= 0 || this.baseHp[1] <= 0 ? (this.baseHp[0] > this.baseHp[1] ? 0 : 1) : this.crowns(0) !== this.crowns(1) ? (this.crowns(0) > this.crowns(1) ? 0 : 1) : this.towerHpSum(0) !== this.towerHpSum(1) ? (this.towerHpSum(0) > this.towerHpSum(1) ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
     return {
       winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime, crowns: [this.crowns(0), this.crowns(1)], skillUses: [...this.skillUses], heroDeploys: [...this.heroDeploys], wattSpent: [...this.wattSpent],
       spawned: [...this.spawned], kills: [...this.kills], spawnsByCard: [[...this.spawnsByCard[0]], [...this.spawnsByCard[1]]], damageByCard: [[...this.damageByCard[0]], [...this.damageByCard[1]]],

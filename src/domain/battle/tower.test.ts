@@ -99,4 +99,11 @@ describe('길 포탑 · 왕관 (클래시 로얄식)', () => {
     let shots = 0; for (let i = 0; i < 4 * TICK_HZ; i++) { b.step(); for (const ev of b.events) if (ev.type === 'tower') shots++; }
     expect(shots).toBe(0);
   });
+
+  it('왕관이 같으면 남은 포탑 체력이 많은 쪽이 먼저, 그다음 기지 체력', () => {
+    const b = mk(deck(biped), deck(biped));
+    b.towers[1][0].hp = 100; b.baseHp[0] = 500; b.baseHp[1] = 1000;           // 왕관 0:0, 내 포탑 체력이 더 많음 → 기지 체력이 낮아도 내가 이긴다
+    while (b.step()) { /* 끝까지 */ }
+    expect(b.crowns(0)).toBe(0); expect(b.result().winner).toBe(0);
+  });
 });
