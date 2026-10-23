@@ -6,6 +6,7 @@
 #   다리(걷기·궤도·바퀴): 위 장착판 가운데 x, 바닥 y 를 원본에 맞춤 / 호버·비행: 장착판 가운데 x, 위쪽 y 를 맞춤 / 무기: 1번 칸 기준으로 모든 칸 같은 배율·같은 위치(칸 안에서의 움직임 보존)
 import os, sys, json
 import numpy as np
+import cv2
 from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,7 +26,13 @@ def remove_white(cell):
             ImageDraw.floodfill(tmp, pt, (255, 0, 255), thresh=34)
     a = np.asarray(tmp).astype(int)
     bg = (a[..., 0] > 240) & (a[..., 1] < 20) & (a[..., 2] > 240)
-    mask = Image.fromarray(((~bg) * 255).astype(np.uint8))
+    m8 = ((~bg) * 255).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats((m8 > 0).astype(np.uint8), connectivity=8)
+    if n > 2:                                    # 옆 칸에서 넘어온 잔점·작은 얼룩 지우기 (가장 큰 덩어리의 0.8% 미만)
+        big = st[1:, cv2.CC_STAT_AREA].max()
+        for i in range(1, n):
+            if st[i, cv2.CC_STAT_AREA] < big * 0.008: m8[lab == i] = 0
+    mask = Image.fromarray(m8)
     mask = mask.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.7))
     out = rgb.convert('RGBA'); out.putalpha(mask)
     return out

@@ -130,5 +130,269 @@
    "back",
    "front"
   ]
+ },
+ "wpn_arm_gatling": {
+  "m": [
+   76,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_blade_heavy": {
+  "m": [
+   86,
+   25,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_blade_lance": {
+  "m": [
+   83,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_blade_short": {
+  "m": [
+   76,
+   21,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_cannon_light": {
+  "m": [
+   57,
+   21,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_cannon_siege": {
+  "m": [
+   83,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_flak_burst": {
+  "m": [
+   84,
+   20,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_flak_light": {
+  "m": [
+   80,
+   19,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_flak_missile": {
+  "m": [
+   82,
+   25,
+   13
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_gatling_heavy": {
+  "m": [
+   81,
+   24,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_gatling_light": {
+  "m": [
+   71,
+   21,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_laser_beam": {
+  "m": [
+   81,
+   21,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_laser_light": {
+  "m": [
+   73,
+   19,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_laser_turret": {
+  "m": [
+   62,
+   21,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_missile_heavy": {
+  "m": [
+   80,
+   20,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_missile_swarm": {
+  "m": [
+   76,
+   21,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_mortar_hand": {
+  "m": [
+   70,
+   26,
+   13
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_mortar_heavy": {
+  "m": [
+   66,
+   26,
+   13
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_mortar_light": {
+  "m": [
+   52,
+   23,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_repair_beam": {
+  "m": [
+   76,
+   19,
+   10
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_repair_drone": {
+  "m": [
+   76,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_repair_field": {
+  "m": [
+   56,
+   24,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_shoulder_missile": {
+  "m": [
+   76,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "wpn_turret_cannon": {
+  "m": [
+   80,
+   23,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
  }
 }

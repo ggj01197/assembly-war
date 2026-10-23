@@ -120,7 +120,12 @@ export class BattleScene extends Phaser.Scene {
       if (!this.textures.exists(p.id)) this.load.image(p.id, spriteUrl(p.id));
       if (!this.textures.exists('b_' + p.id)) this.load.image('b_' + p.id, spriteUrlBack(p.id));
     }
-    for (const [pid, info] of Object.entries(ANIM)) for (const side of info.sides) { const key = 'an_' + (side === 'back' ? 'b_' : '') + pid; if (!this.textures.exists(key)) this.load.image(key, `sprites/anim/${pid}_${side}.png`); }
+    // 동작 그림은 이번 전투에 나오는 부품 것만 불러온다 (전부 25MB)
+    const need = new Set<string>(), b0 = this.cfg.battle;
+    const addB = (bd?: { legs: string; weapon: string }) => { if (bd) { need.add(bd.legs); need.add(bd.weapon); } };
+    for (const t of [0, 1] as const) { for (const c of b0.decks[t]) addB(c.build); addB(b0.hero[t]?.def.build); }
+    addB(b0.bossDef?.build);
+    for (const [pid, info] of Object.entries(ANIM)) if (need.has(pid)) for (const side of info.sides) { const key = 'an_' + (side === 'back' ? 'b_' : '') + pid; if (!this.textures.exists(key)) this.load.image(key, `sprites/anim/${pid}_${side}.png`); }
     for (const k of FX_KEYS) if (!this.textures.exists(k)) this.load.image(k, `sprites/fx/${k}.png`);
     for (const k of TOWER_KEYS) if (!this.textures.exists(k)) this.load.image(k, `sprites/tower/${k}.png`);
     this.load.on('loaderror', () => { /* 뒷모습이 없으면 앞모습으로 대신한다 (layoutUnit) */ });
