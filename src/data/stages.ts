@@ -60,7 +60,7 @@ const lanceTrack: Build = { legs: 'legs_track_light', body: 'body_arm_assault', 
 const CH1: Raw[] = [
   { id: 'c1-1', no: 1, name: '첫 출동', hint: '아래 카드를 누른 뒤, 아군 쪽 길을 눌러 생산하세요.', enemy: [biped], enemyLevel: 1, enemyWattMult: 0.45, rewardOre: 120, rewardExp: 60 },
   { id: 'c1-2', no: 2, name: '두 갈래 길', hint: '적이 몰린 길에 유닛을 놓아 막으세요.', enemy: [biped, trackGat], enemyLevel: 1, enemyWattMult: 0.6, rewardOre: 140, rewardExp: 70 },
-  { id: 'c1-3', no: 3, name: '첫 조립', hint: '격납고의 「조립」에서 설계도를 바꿔 오면 더 강해집니다.', enemy: [trackGat, trackCannon], enemyLevel: 1, enemyWattMult: 0.65, rewardOre: 160, rewardExp: 80 },
+  { id: 'c1-3', no: 3, name: '첫 조립', hint: '격납고의 「유닛 바꾸기」에서 추천 카드로 바꿔 오면 더 강해집니다.', enemy: [trackGat, trackCannon], enemyLevel: 1, enemyWattMult: 0.65, rewardOre: 160, rewardExp: 80 },
   { id: 'c1-4', no: 4, name: '하늘의 적', hint: '공중 유닛은 어깨형 미사일만 맞힙니다. 대공 카드를 준비하세요.', enemy: [hoverGat, hoverMissile, trackGat], enemyLevel: 1, enemyWattMult: 0.7, rewardOre: 180, rewardExp: 90 },
   { id: 'c1-5', rule: 'rl_storm', no: 5, name: '중앙 교차로', hint: '와트가 번갈아 빠르게·느리게 충전됩니다. 빠를 때 카드를 아끼지 말고 쓰세요.', enemy: [trackCannon, trackMissile, biped], enemyLevel: 1, enemyWattMult: 0.8, rewardOre: 200, rewardExp: 100 },
   { id: 'c1-6', rule: 'rl_heat', no: 6, name: '부대 편성', hint: '6장의 설계도를 섞어 쓰세요. 한 종류만 내면 상성에 집니다.', enemy: [biped, trackGat, trackCannon, hoverGat, hoverMissile], enemyLevel: 2, enemyWattMult: 0.9, rewardOre: 230, rewardExp: 120 },

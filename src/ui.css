@@ -493,3 +493,6 @@ i.brief { display: block; font-style: normal; color: #9fd9ff; font-weight: 700; 
 .as-fix b { font: 700 14px var(--body); } .as-fix small { font: 400 11.5px/1.3 var(--body); }
 .as-top b { white-space: nowrap; }
 @media (max-width: 359px) { .as-top > span { display: none; } .as-top b { font-size: 20px; } .as-top .as-mode { padding: 0 10px; } }
+.hg-role { font-weight: 700; padding: 0 7px; border-radius: 9px; background: rgba(95,211,255,.16); color: var(--cyan); }
+.hg-role.r-melee { background: rgba(255,122,69,.18); color: #ff9c6f; } .hg-role.r-siege { background: rgba(217,164,65,.2); color: #ffcf7a; } .hg-role.r-tank { background: rgba(143,227,180,.18); color: var(--mint); }
+.hg-role.r-air { background: rgba(165,139,255,.22); color: #c8b8ff; } .hg-role.r-antiair { background: rgba(255,208,103,.18); color: #ffd067; } .hg-role.r-support { background: rgba(111,227,154,.18); color: #6fe39a; }

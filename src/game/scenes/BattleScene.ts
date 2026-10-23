@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TICK_HZ, ARENA_W, ARENA_H, RIVER_Y0, RIVER_Y1, BRIDGE_X, BRIDGE_HALF, SIDES, TOWER_R, BASE_R, BOMB_RADIUS, canDeployAt, towerPos, basePos, type Battle, type BattleEvent, type Unit } from '../../domain/battle/sim';
+import { TICK_HZ, ARENA_W, ARENA_H, RIVER_Y0, RIVER_Y1, BRIDGE_X, BRIDGE_HALF, SIDES, TOWER_R, BASE_R, BOMB_RADIUS, towerPos, basePos, POCKET_DEPTH, type Battle, type BattleEvent, type Unit } from '../../domain/battle/sim';
 import { layoutUnit, spriteUrl, spriteUrlBack, spriteSize, spriteSizeBack } from '../unitLayout';
 import animFrames from '../../data/anim-frames.json';
 import { PARTS } from '../../data/parts';
@@ -348,7 +348,7 @@ export class BattleScene extends Phaser.Scene {
   private toWorld(cx: number, cy: number) { const r = this.game.canvas.getBoundingClientRect(); return { x: (cx - r.left) * (this.W / r.width), y: (cy - r.top) * (this.H / r.height) }; }
   private whyNot(b: Battle, card: number, ax: number, ay: number): string | null {
     if (b.costOf(0, card) > b.watt[0]) return '와트가 부족해요. 조금 기다리세요.';
-    if (!canDeployAt(0, ax, ay)) return ay > RIVER_Y0 ? '내 진영(강 아래쪽)에만 놓을 수 있어요.' : '여기에는 놓을 수 없어요. (포탑·기지·벽 근처)';
+    if (!b.canDeploy(0, ax, ay)) return ay > RIVER_Y0 ? `내 진영(강 아래쪽)에만 놓을 수 있어요.${b.towersOn && !b.survival && b.towers[1].some(t => t.hp <= 0) ? ' 부순 포탑 쪽 파란 칸(포켓)에도 놓을 수 있어요.' : ''}` : '여기에는 놓을 수 없어요. (포탑·기지·벽 근처)';
     return '유닛이 너무 많아요.';
   }
   private onDrag(ph: DragPhase, card: number, cx: number, cy: number) {
@@ -418,7 +418,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.selHero) {
-      if (b.deployHero(0, at.x, at.y)) this.selHero = false; else { play('deny'); hud.toast(canDeployAt(0, at.x, at.y) ? '지금은 출격할 수 없어요.' : '내 진영(강 아래쪽)의 빈 땅을 눌러 주세요.'); }
+      if (b.deployHero(0, at.x, at.y)) this.selHero = false; else { play('deny'); hud.toast(b.canDeploy(0, at.x, at.y) ? '지금은 출격할 수 없어요.' : '내 진영(강 아래쪽)의 빈 땅을 눌러 주세요.'); }
       return;
     }
     if (this.selected === null) { hud.toast('아래 카드를 먼저 눌러 고르세요. 끌어다 놓아도 돼요.'); play('deny'); return; }
@@ -547,7 +547,7 @@ export class BattleScene extends Phaser.Scene {
         this.fx.push({ kind: 'ring', x1: tp.x, y1: tp.y, x2: tp.x, y2: tp.y, t: 0, dur: 0.6, color: 0xffd7a0, r: 70 * tp.s * wk });
         play('baseHit'); play('boom', 0); buzz('heavy');
         if (!calm) { this.cameras.main.shake(380, 0.012); if (e.team === 1) this.cameras.main.flash(140, 255, 236, 200, true); }
-        this.cfg.hud.toast(e.team === 1 ? '적 포탑 파괴! 왕관 +1 👑' : '내 포탑이 무너졌어요!');
+        this.cfg.hud.toast(e.team === 1 ? '적 포탑 파괴! 왕관 +1 👑 · 그쪽 길 앞에 유닛을 놓을 수 있어요' : '내 포탑이 무너졌어요!');
       } else if (e.type === 'die') {
         const q = this.proj(e.x, e.y), x = q.x, y = q.y - 18 * q.s, s = q.s;
         const col = e.team === 0 ? 0x5fd3ff : 0xff7a45;
@@ -868,13 +868,19 @@ export class BattleScene extends Phaser.Scene {
     const pulse = 0.5 + 0.5 * Math.sin(now * 4);
     if (this.selSkill === null) {
       lg.fillStyle(0x5fd3ff, 0.07 + 0.04 * pulse); lg.fillPoints(this.pt([0.8, 0.8], [ARENA_W - 0.8, 0.8], [ARENA_W - 0.8, RIVER_Y0 - 0.6], [0.8, RIVER_Y0 - 0.6]), true);
+      // 포켓: 상대 포탑이 무너진 쪽 길의 강 건너 땅도 놓을 수 있게 열린다
+      for (let sd = 0; sd < SIDES; sd++) if (b.towersOn && !b.survival && b.towers[1][sd].hp <= 0) {
+        const x0 = sd === 0 ? 0.8 : ARENA_W / 2 + 0.5, x1 = sd === 0 ? ARENA_W / 2 - 0.5 : ARENA_W - 0.8, y0 = ARENA_H - RIVER_Y0 + 1, y1 = ARENA_H - RIVER_Y0 + POCKET_DEPTH;
+        lg.fillStyle(0x5fd3ff, 0.1 + 0.05 * pulse); lg.fillPoints(this.pt([x0, y0], [x1, y0], [x1, y1], [x0, y1]), true);
+        lg.lineStyle(2, 0x5fd3ff, 0.6); lg.strokePoints(this.pt([x0, y0], [x1, y0], [x1, y1], [x0, y1]), true);
+      }
       lg.lineStyle(2, 0x5fd3ff, 0.5); lg.strokePoints(this.pt([0.8, 0.8], [ARENA_W - 0.8, 0.8], [ARENA_W - 0.8, RIVER_Y0 - 0.6], [0.8, RIVER_Y0 - 0.6]), true);
       for (let s = 0; s < SIDES; s++) { const p = towerPos(0, s); this.ring(lg, p.x, p.y, TOWER_R + 0.9, 0xff5a5a, 0.5, 1.5, false, 0.16); }
       const bp = basePos(0); this.ring(lg, bp.x, bp.y, BASE_R + 0.9, 0xff5a5a, 0.5, 1.5, false, 0.16);
     }
     const h = this.hover; if (!h) return;
     if (this.selSkill !== null) { this.ring(lg, h.x, h.y, BOMB_RADIUS, 0xff7a45, 0.9, 3, false, 0.14); return; }
-    const ok = canDeployAt(0, h.x, h.y);
+    const ok = b.canDeploy(0, h.x, h.y);
     const u = this.selHero ? b.hero[0]?.def : null;
     const stats = this.selected !== null ? b.decks[0][this.selected].stats : u ? u.stats : null;
     if (!stats) return;

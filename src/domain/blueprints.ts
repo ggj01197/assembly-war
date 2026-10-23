@@ -77,3 +77,14 @@ export const ADVANCED_UNLOCK_STAGE = 'c1-4';
 export function advancedUnlocked(s: Pick<SaveData, 'stages'>): boolean {
   return (s.stages[ADVANCED_UNLOCK_STAGE]?.clears ?? 0) > 0;
 }
+
+/** 설계도의 이름·역할: 추천 카드와 같으면 그 카드 이름, 아니면 무기·다리로 짐작한 역할 + 무기 이름 */
+export function describeBuild(build: Build): { name: string; role: Role; custom: boolean } {
+  const bp = BLUEPRINTS.find(b => sameBuild(b.build, { ...build, accessory: undefined }));
+  if (bp) return { name: bp.name, role: bp.role, custom: false };
+  const w = PARTS.find(p => p.id === build.weapon), l = PARTS.find(p => p.id === build.legs);
+  const fam = w && w.kind === 'weapon' ? w.family : '';
+  const air = l && l.kind === 'legs' && l.move === 'air';
+  const role: Role = fam === 'repair' ? 'support' : fam === 'flak' ? 'antiair' : air ? 'air' : fam === 'blade' ? 'melee' : fam === 'mortar' || fam === 'cannon' ? 'siege' : 'ranged';
+  return { name: w?.name ?? build.weapon, role, custom: true };
+}

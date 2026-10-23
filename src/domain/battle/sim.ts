@@ -157,13 +157,24 @@ export const WAVE_SECONDS = 15;
 export const towerPos = (team: Team, side: number): { x: number; y: number } => ({ x: BRIDGE_X[side], y: team === 0 ? 8.5 : ARENA_H - 8.5 });
 export const basePos = (team: Team): { x: number; y: number } => ({ x: ARENA_W / 2, y: team === 0 ? 2.6 : ARENA_H - 2.6 });
 
-/** 내 진영에 놓을 수 있는 자리인가: 자기 쪽 땅(강 밖), 벽·포탑·기지에서 떨어져 있어야 한다 */
-export function canDeployAt(team: Team, x: number, y: number): boolean {
+/** 포켓: 상대 포탑이 무너진 쪽 길에서는 강 건너 상대 땅 일부(강에서 4.5칸까지)에도 놓을 수 있다 (클래시 로얄의 「포켓」) */
+export const POCKET_DEPTH = 4.5;
+/**
+ * 놓을 수 있는 자리인가: 자기 쪽 땅(강 밖), 벽·포탑·기지에서 떨어져 있어야 한다.
+ * open[s] = 상대의 s 번째 포탑이 무너졌는가 → 그 길의 포켓이 열린다.
+ */
+export function canDeployAt(team: Team, x: number, y: number, open: readonly boolean[] = []): boolean {
   if (!(x >= 0.8 && x <= ARENA_W - 0.8)) return false;
   const ym = team === 0 ? y : ARENA_H - y;
-  if (!(ym >= 0.8 && ym <= RIVER_Y0 - 0.6)) return false;
-  for (let s = 0; s < SIDES; s++) { const p = towerPos(team, s); if (Math.hypot(p.x - x, p.y - y) < TOWER_R + 0.9) return false; }
-  const b = basePos(team); return Math.hypot(b.x - x, b.y - y) >= BASE_R + 0.9;
+  if (ym >= 0.8 && ym <= RIVER_Y0 - 0.6) {
+    for (let s = 0; s < SIDES; s++) { const p = towerPos(team, s); if (Math.hypot(p.x - x, p.y - y) < TOWER_R + 0.9) return false; }
+    const b = basePos(team); return Math.hypot(b.x - x, b.y - y) >= BASE_R + 0.9;
+  }
+  const farY = ARENA_H - RIVER_Y0;   // 상대 땅이 시작되는 높이(내 기준)
+  if (ym >= farY + 1 && ym <= farY + POCKET_DEPTH) {
+    for (let s = 0; s < SIDES; s++) if (open[s] && (s === 0 ? x <= ARENA_W / 2 - 0.5 : x >= ARENA_W / 2 + 0.5)) return true;
+  }
+  return false;
 }
 
 /** 부품 사거리(단위) → 타일 */
@@ -297,11 +308,18 @@ export class Battle {
     return { id: this.nextId++, team, x, y, px: x, py: y, moving: false, face, hero, hp: stats.hp, maxHp: stats.hp, stats, cd: 0, card, tgt: null, r, born: this.tick };
   }
 
+  /** 지금 이 팀이 (x, y) 에 놓을 수 있는가 (상대 포탑이 무너져 열린 포켓 포함) */
+  canDeploy(team: Team, x: number, y: number): boolean {
+    const foe: Team = team === 0 ? 1 : 0;
+    const open = this.towersOn && !this.survival ? this.towers[foe].map(t => t.hp <= 0) : [];
+    return canDeployAt(team, x, y, open);
+  }
+
   /** 플레이어(또는 외부)가 카드를 (x, y) 타일에 놓는다. 와트·동시 유닛 상한·놓을 수 있는 자리를 지키며 성공 여부를 돌려준다. */
   spawn(team: Team, cardIdx: number, x: number, y: number): boolean {
     if (this.over) return false;
     const card = this.decks[team][cardIdx];
-    if (!card || !canDeployAt(team, x, y)) return false;
+    if (!card || !this.canDeploy(team, x, y)) return false;
     if (this.handOn && !this.hand[team].includes(cardIdx)) return false;
     const cost = this.costOf(team, cardIdx);
     if (cost > this.watt[team] + 1e-9) return false;
@@ -730,7 +748,7 @@ export class Battle {
   deployHero(team: Team, x: number, y: number): boolean {
     const h = this.hero[team];
     if (this.rule?.id === 'rl_nohero') return false;
-    if (this.over || !h || h.unit !== null || h.respawn > 0 || !canDeployAt(team, x, y) || this.watt[team] + 1e-9 < HERO_WATT) return false;
+    if (this.over || !h || h.unit !== null || h.respawn > 0 || !this.canDeploy(team, x, y) || this.watt[team] + 1e-9 < HERO_WATT) return false;
     this.watt[team] -= HERO_WATT; this.wattSpent[team] += HERO_WATT; this.heroDeploys[team]++;
     const hm = h.mult * (1 + this.mod[team].hero);
     const st = { ...h.def.stats, hp: Math.round(h.def.stats.hp * hm), dmg: Math.round(h.def.stats.dmg * hm) };

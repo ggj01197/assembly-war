@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PARTS } from '../../data/parts';
-import { Battle, TICK_HZ, ARENA_W, ARENA_H, RIVER_Y0, RIVER_Y1, BRIDGE_X, BRIDGE_HALF, canDeployAt, towerPos, basePos, rangeTiles, type Unit } from './sim';
+import { Battle, TICK_HZ, POCKET_DEPTH, ARENA_W, ARENA_H, RIVER_Y0, RIVER_Y1, BRIDGE_X, BRIDGE_HALF, canDeployAt, towerPos, basePos, rangeTiles, type Unit } from './sim';
 import type { Build } from '../assemble';
 
 const biped: Build = { legs: 'legs_biped_light', body: 'body_arm_scout', weapon: 'wpn_arm_gatling' };
@@ -117,5 +117,27 @@ describe('2D 아레나: 결정론', () => {
     while (b.step()) { /* */ }
     const r = b.result(); expect(r.spawned[0]).toBeGreaterThan(6); expect(r.spawned[1]).toBeGreaterThan(6); expect(r.kills[0] + r.kills[1]).toBeGreaterThan(2);
     void ARENA_W;
+  });
+});
+
+describe('2D 아레나: 포켓 (상대 포탑이 무너지면 그 길 앞까지)', () => {
+  it('포탑이 서 있으면 상대 땅에는 못 놓고, 무너진 쪽 길에서만 강 건너 4.5칸까지 열린다', () => {
+    const b = mk([biped], [biped]); b.watt[0] = 10;
+    expect(b.canDeploy(0, 4.5, 20)).toBe(false);                       // 포탑 멀쩡
+    b.towers[1][0].hp = 0;                                             // 왼쪽 포탑 파괴
+    expect(b.canDeploy(0, 4.5, 20)).toBe(true);                        // 왼쪽 포켓
+    expect(b.canDeploy(0, 13.5, 20)).toBe(false);                      // 오른쪽은 아직
+    expect(b.canDeploy(0, 4.5, 17.8)).toBe(false);                     // 강 바로 앞(너무 가까움)
+    expect(b.canDeploy(0, 4.5, RIVER_Y1 + POCKET_DEPTH + 1)).toBe(false);   // 포켓 밖
+    expect(b.spawn(0, 0, 4.5, 20)).toBe(true);
+    b.watt[1] = 10; expect(b.canDeploy(1, 4.5, 12)).toBe(false);       // 내 포탑은 멀쩡 → 상대는 못 들어옴
+  });
+  it('연습(towers:false)·버티기에서는 포켓이 열리지 않는다', () => {
+    const b = mk([biped], [biped], { towers: false }); b.towers[1][0].hp = 0; expect(b.canDeploy(0, 4.5, 20)).toBe(false);
+    const c = mk([biped], [biped], { survival: true }); c.towers[1][0].hp = 0; expect(c.canDeploy(0, 4.5, 20)).toBe(false);
+  });
+  it('상대 팀도 대칭으로 열린다', () => {
+    const b = mk([biped], [biped]); b.towers[0][1].hp = 0;
+    expect(b.canDeploy(1, 13.5, 12)).toBe(true); expect(b.canDeploy(1, 4.5, 12)).toBe(false);
   });
 });

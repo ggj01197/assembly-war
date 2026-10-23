@@ -1,4 +1,5 @@
 import { assemble, type Build } from '../domain/assemble';
+import { describeBuild, ROLE_LABEL } from '../domain/blueprints';
 import { PARTS } from '../data/parts';
 import { CHAPTERS, STAGES, SURVIVAL, OPS, RUSH, RUSH_BONUS, OP_DAILY_CAP, TOWER_MAX, opOfDay, towerStage, weekKey, isUnlocked } from '../data/stages';
 import { store, update } from '../game/store';
@@ -31,7 +32,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
   /** 이야기 지도에서 고른 작전 id (없으면 지금 도전할 작전) */
   let selStage: string | null = null;
 
-  const slotTitle = (b: Build) => partName(b.weapon);
+  const slotTitle = (b: Build) => describeBuild(b).name;
 
   /** 상단 배너(Stitch 시안의 EVENT 줄): 열린 시즌이 있으면 시즌, 아니면 오늘의 요일 작전 */
   function bannerHtml(s: ReturnType<typeof store.getState>['save']): string {
@@ -75,7 +76,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </header>
       ${bannerHtml(s)}
       <section class="hg-stage">
-        <div class="hg-name"><small>설계도 ${sel + 1}</small><b>${esc(slotTitle(b))}</b><em>${esc(partName(b.legs))} · ${esc(partName(b.body))}${b.accessory ? ' · ' + esc(partName(b.accessory)) : ''}</em></div>
+        <div class="hg-name"><small>설계도 ${sel + 1} · <span class="hg-role r-${describeBuild(b).role}">${ROLE_LABEL[describeBuild(b).role]}</span>${describeBuild(b).custom ? ' · 직접 조립' : ''}</small><b>${esc(slotTitle(b))}</b><em>${esc(partName(b.legs))} · ${esc(partName(b.body))}${b.accessory ? ' · ' + esc(partName(b.accessory)) : ''}</em></div>
         <div class="hg-showcase"><div class="platform"></div>${unitFit(b, Math.min(300, window.innerWidth - 60), Math.min(250, Math.max(110, window.innerHeight - 470)), 'showcase')}</div>
         <div class="hg-chips">
           <span><small>체력</small><b>${st ? st.hp : '-'}</b></span>
@@ -101,7 +102,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         <button class="nv" id="nvUpgrade" type="button"><i class="nv-ic" aria-hidden="true">🔩</i>강화</button>
         <button class="nv" id="nvShop" type="button"><i class="nv-ic" aria-hidden="true">🛒</i>상점</button>
       </nav>
-      ${guideAssemble ? '<div class="hg-tip">첫 승리! 설계도를 바꿔 더 강해져 보세요.</div>' : ''}
+      ${guideAssemble ? '<div class="hg-tip">첫 승리! 🔧 유닛 바꾸기에서 추천 카드를 골라 보세요.</div>' : guideSortie ? '<div class="hg-tip">먼저 ▶ 출격해 보세요. 유닛은 🔧 유닛 바꾸기에서 언제든 바꿀 수 있어요.</div>' : ''}
       ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml(sst.msTab ?? 'daily') : sheet === 'attend' ? attendHtml() : sheet === 'season' ? seasonHtml() : sheet === 'story' ? storyHtml() : ''}`;
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });

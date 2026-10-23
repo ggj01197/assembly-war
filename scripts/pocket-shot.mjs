@@ -1,0 +1,20 @@
+// 포켓 점검: 적 왼쪽 포탑을 부순 상태에서 카드를 고르면 열린 구역이 보이는지 (개발 서버 5190 필요)
+import { chromium } from 'playwright-core';
+import { fileURLToPath } from 'node:url';
+const OUT = fileURLToPath(new URL('../../00_PROJECT_CONTROL/shots/', import.meta.url));
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
+await page.evaluate(() => window.__aw.startBattle('c1-3'));
+await page.waitForSelector('.screen.battle:not([hidden])');
+await page.waitForTimeout(800);
+await page.evaluate(() => { window.__aw.battle.towers[1][0].hp = 0; });
+await page.waitForTimeout(500);
+await (await page.locator('.card[data-i]').all())[0].click();
+await page.mouse.click(390 * 0.3, 330);
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${OUT}/390x844_pocket.png` });
+console.log('ok', await page.evaluate(() => window.__aw.battle.units.map(u => [u.team, +u.y.toFixed(1)])));
+await browser.close();
