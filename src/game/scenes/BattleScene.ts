@@ -59,8 +59,8 @@ const FX_KEYS = ['fx_explosion', 'fx_smoke', 'fx_spark', 'fx_energy', 'fx_slash'
 const TOWER_KEYS = ['tower_f_ok', 'tower_f_hurt', 'tower_f_dead', 'tower_b_ok', 'tower_b_hurt', 'tower_b_dead'];
 const TRAY_H = 176;     // CSS 와 같아야 한다 (battle .bt-tray)
 const TOP_H = 84;       // 위 막대·타이머
-const FAR_SCALE = 0.66;  // 먼 곳(적 진영) 유닛 크기 비율 — 원근
-const NEAR_W = 0.97, FAR_W = 0.76;   // 화면 폭 대비 아레나 폭: 아래(내 쪽)·위(적 쪽)
+const FAR_SCALE = 0.8;  // 먼 곳(적 진영) 유닛 크기 비율 — 원근
+const NEAR_W = 0.98, FAR_W = 0.9;   // 화면 폭 대비 아레나 폭: 아래(내 쪽)·위(적 쪽)
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -83,6 +83,8 @@ export class BattleScene extends Phaser.Scene {
   private fxG!: Phaser.GameObjects.Graphics;
   private laneG!: Phaser.GameObjects.Graphics;
   private groundG!: Phaser.GameObjects.Graphics;
+  /** 메인 타워 체력 문·포탑 체력 막대: 유닛·건물 그림 위에 */
+  private plateG!: Phaser.GameObjects.Graphics;
   private arenaG!: Phaser.GameObjects.Graphics;
   private waterG!: Phaser.GameObjects.Graphics;
   private bridgeG!: Phaser.GameObjects.Graphics;
@@ -92,7 +94,7 @@ export class BattleScene extends Phaser.Scene {
   private selHero = false;
   private ended = false;
   private baseFlash: [number, number] = [0, 0];
-  private W = 390; private H = 844; private y0 = 130; private y1 = 600; private k = 0.6;
+  private fxK = 0.6; private W = 390; private H = 844; private y0 = 130; private y1 = 600; private k = 0.6;
   private firstSpawnHinted = false;
   private wattFull = false;
   private dead = false;
@@ -102,7 +104,7 @@ export class BattleScene extends Phaser.Scene {
   private baseTxt: [Phaser.GameObjects.Text | null, Phaser.GameObjects.Text | null] = [null, null];
   private motes: { x: number; y: number; v: number; s: number }[] = [];
   private towerImgs: Phaser.GameObjects.Image[][] = [[], []];
-  private towerKick: number[][] = [[0, 0], [0, 0]]; private towerFlash: number[][] = [[0, 0], [0, 0]]; private towerSmoke = 0;
+  private towerKick: number[][] = [[0, 0, 0], [0, 0, 0]]; private towerFlash: number[][] = [[0, 0, 0], [0, 0, 0]]; private towerSmoke = 0;
   private numbers = new Map<string, { acc: number; t: number; x: number; y: number; color: number; heal: boolean }>();
   private drag: { card: number; ghost: Phaser.GameObjects.Container } | null = null;
 
@@ -111,7 +113,7 @@ export class BattleScene extends Phaser.Scene {
   init(cfg: BattleConfig) {
     this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
     this.baseFlash = [0, 0]; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hover = null; this.bossText = null; this.baseTxt = [null, null];
-    this.towerImgs = [[], []]; this.towerKick = [[0, 0], [0, 0]]; this.towerFlash = [[0, 0], [0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
+    this.towerImgs = [[], []]; this.towerKick = [[0, 0, 0], [0, 0, 0]]; this.towerFlash = [[0, 0, 0], [0, 0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
   }
 
   preload() {
@@ -145,6 +147,7 @@ export class BattleScene extends Phaser.Scene {
     this.bridgeG = this.add.graphics().setDepth(-4);
     this.laneG = this.add.graphics().setDepth(5);
     this.groundG = this.add.graphics().setDepth(6);
+    this.plateG = this.add.graphics().setDepth(90000);
     this.fxG = this.add.graphics().setDepth(100000);
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.dead = true; this.scale.off('resize', this.onResize, this); });
@@ -180,12 +183,14 @@ export class BattleScene extends Phaser.Scene {
   private layout() {
     this.W = this.scale.width; this.H = this.scale.height;
     const m = this.cfg.hud.metrics();
-    this.y0 = (m.top || TOP_H) + 30;                 // 적 쪽 끝(y = ARENA_H)
-    this.y1 = this.H - (m.tray || TRAY_H) - 22;      // 내 쪽 끝(y = 0)
-    this.k = clamp(0.6 * (this.W / 390), 0.42, 0.85);
+    // 화면 전체를 쓴다: 위쪽 HUD(나가기·시간)는 모서리에 겹쳐 있고, 바닥은 맨 위·맨 아래까지 이어진다
+    this.y0 = (m.top || TOP_H) + 46;                 // 적 쪽 끝(y = ARENA_H) — 적 메인 타워 그림이 화면 위로 안 나갈 만큼만 남긴다
+    this.y1 = this.H - (m.tray || TRAY_H) + 6;       // 내 쪽 끝(y = 0) — 카드 줄 바로 위
+    this.k = clamp(0.36 * (this.fxK), 0.26, 0.56);
+    this.fxK = this.k / 0.6;                         // 효과 크기 (유닛 크기에 비례)
   }
   private onResize() { this.layout(); this.drawStatic(); this.buildTowers(); }
-  private tOfY = (y: number) => clamp(y / ARENA_H, 0, 1);
+  private tOfY = (y: number) => y / ARENA_H;   // 아레나 밖(바닥 연장부)도 같은 비율로 이어진다
   private widthAt(t: number) { return lerp(this.W * NEAR_W, this.W * FAR_W, t); }
   private scaleAt(t: number) { return lerp(1, FAR_SCALE, t); }
   /** 타일 → 화면 */
@@ -205,18 +210,19 @@ export class BattleScene extends Phaser.Scene {
     this.add.rectangle(this.W / 2, this.H / 2, this.W, this.H, 0x070d16, 1).setName('bg').setDepth(-20);
     const g = this.arenaG; g.clear();
     // 바닥: 깊이마다 살짝 다른 어두운 금속색 띠 + 패널 이음선
-    for (let i = 0; i < ARENA_H; i++) {
-      const mine = i < ARENA_H / 2, a = 0.55 + 0.3 * ((i % 2) as number);
+    const EXT = 9;   // 아레나 위·아래로 바닥을 이어 화면 맨 위·맨 아래까지 채운다
+    for (let i = -EXT; i < ARENA_H + EXT; i++) {
+      const mine = i < ARENA_H / 2, a = 0.55 + 0.3 * ((i % 2) as number), out = i < 0 || i >= ARENA_H;
       const c = mine ? (i % 2 ? 0x10243a : 0x0d1e33) : (i % 2 ? 0x2a1a1c : 0x241619);
-      g.fillStyle(c, a + 0.2); g.fillPoints(this.pt([0, i], [ARENA_W, i], [ARENA_W, i + 1], [0, i + 1]), true);
+      g.fillStyle(c, (a + 0.2) * (out ? 0.7 : 1)); g.fillPoints(this.pt([0, i], [ARENA_W, i], [ARENA_W, i + 1], [0, i + 1]), true);
     }
     g.lineStyle(1, 0x7fb2e0, 0.1);
-    for (let x = 0; x <= ARENA_W; x += 2) { const a = this.proj(x, 0), b = this.proj(x, ARENA_H); g.lineBetween(a.x, a.y, b.x, b.y); }
-    for (let y = 0; y <= ARENA_H; y += 2) { const a = this.proj(0, y), b = this.proj(ARENA_W, y); g.lineBetween(a.x, a.y, b.x, b.y); }
+    for (let x = 0; x <= ARENA_W; x += 2) { const a = this.proj(x, -EXT), b = this.proj(x, ARENA_H + EXT); g.lineBetween(a.x, a.y, b.x, b.y); }
+    for (let y = -EXT; y <= ARENA_H + EXT; y += 2) { const a = this.proj(0, y), b = this.proj(ARENA_W, y); g.lineBetween(a.x, a.y, b.x, b.y); }
     // 양쪽 벽
     for (const sx of [-1, 1]) {
       const x0 = sx < 0 ? -1.6 : ARENA_W, x1 = sx < 0 ? 0 : ARENA_W + 1.6;
-      g.fillStyle(0x070f1b, 0.95); g.fillPoints(this.pt([x0, 0], [x1, 0], [x1, ARENA_H], [x0, ARENA_H]), true);
+      g.fillStyle(0x070f1b, 0.95); g.fillPoints(this.pt([x0, -EXT], [x1, -EXT], [x1, ARENA_H + EXT], [x0, ARENA_H + EXT]), true);
       const e = sx < 0 ? 0 : ARENA_W;
       g.lineStyle(3, 0x5fd3ff, 0.55); const a = this.proj(e, 0), b = this.proj(e, RIVER_Y0 - 0.2); g.lineBetween(a.x, a.y, b.x, b.y);
       g.lineStyle(3, 0xff7a45, 0.55); const c = this.proj(e, RIVER_Y1 + 0.2), d = this.proj(e, ARENA_H); g.lineBetween(c.x, c.y, d.x, d.y);
@@ -277,35 +283,37 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ───────── 포탑 (길마다 양쪽 1기) ─────────
-  private towerXY(team: 0 | 1, side: number) { const p = towerPos(team, side), q = this.proj(p.x, p.y); return { x: q.x, y: q.y, s: q.s }; }
+  /** 포탑 자리 (side −1·SIDES = 메인 타워=기지) */
+  private towerXY(team: 0 | 1, side: number) { const p = side < 0 || side >= SIDES ? basePos(team) : towerPos(team, side), q = this.proj(p.x, p.y); return { x: q.x, y: q.y, s: q.s }; }
   private buildTowers() {
     for (const row of this.towerImgs) for (const im of row) im.destroy();
     this.towerImgs = [[], []];
-    for (const team of [0, 1] as const) for (let l = 0; l < SIDES; l++) {
+    for (const team of [0, 1] as const) for (let l = 0; l <= SIDES; l++) {   // 마지막 칸 = 메인 타워(기지)
       const im = this.add.image(0, 0, team === 0 ? 'tower_b_ok' : 'tower_f_ok').setOrigin(0.5, 0.88);
       this.towerImgs[team].push(im);
     }
   }
   private syncTowers(b: Battle, dt: number) {
-    if (!b.towersOn) { for (const row of this.towerImgs) for (const im of row) im.setVisible(false); return; }
-    const gg = this.groundG;
-    for (const team of [0, 1] as const) for (let l = 0; l < SIDES; l++) {
+    const gg = this.plateG;
+    for (const team of [0, 1] as const) for (let l = 0; l <= SIDES; l++) {
       const im = this.towerImgs[team][l]; if (!im) continue;
-      const tw = b.towers[team][l], f = tw.hp / tw.maxHp, pre = team === 0 ? 'tower_b_' : 'tower_f_';
-      const key = pre + (tw.hp <= 0 ? 'dead' : f < 0.45 ? 'hurt' : 'ok');
+      const isBase = l === SIDES;
+      if (!isBase && !b.towersOn) { im.setVisible(false); continue; }
+      const hp = isBase ? b.baseHp[team] : b.towers[team][l].hp, maxHp = isBase ? 1000 : b.towers[team][l].maxHp, f = hp / maxHp, pre = team === 0 ? 'tower_b_' : 'tower_f_';
+      const key = pre + (hp <= 0 ? 'dead' : f < 0.45 ? 'hurt' : 'ok');
       if (im.texture.key !== key) im.setTexture(key);
       const { x, y, s } = this.towerXY(team, l), okW = this.textures.get(pre + 'ok').getSourceImage().width;
-      const dw = this.W * 0.2 * s, k = dw / okW, src = im.texture.getSourceImage();
+      const dw = this.W * (isBase ? 0.3 : 0.17) * s, k = dw / okW, src = im.texture.getSourceImage();
       this.towerKick[team][l] = Math.max(0, this.towerKick[team][l] - dt * 7); this.towerFlash[team][l] = Math.max(0, this.towerFlash[team][l] - dt * 8);
       const kick = this.cfg.reducedMotion ? 0 : this.towerKick[team][l];
       im.setPosition(x, y + kick * 4 * s * (team === 0 ? 1 : -1)).setDisplaySize(src.width * k * (1 + kick * 0.04), src.height * k * (1 - kick * 0.03)).setDepth(y).setVisible(true);
-      if (this.towerFlash[team][l] > 0.3 && tw.hp > 0) im.setTintFill(0xffffff); else im.clearTint();
-      if (tw.hp > 0 && f < 1) {
+      if (this.towerFlash[team][l] > 0.3 && hp > 0) im.setTintFill(0xffffff); else im.clearTint();
+      if (!isBase && hp > 0 && f < 1) {
         const w = dw * 0.95, bx = x - w / 2, by = y - src.height * k * 0.88 - 8 * s;
         gg.fillStyle(0x000000, 0.65); gg.fillRect(bx - 1, by - 1, w + 2, 6);
         gg.fillStyle(team === 0 ? 0x5fd3ff : 0xff7a45, 1); gg.fillRect(bx, by, w * f, 4);
       }
-      if (tw.hp <= 0 && !this.cfg.reducedMotion) {
+      if (hp <= 0 && !this.cfg.reducedMotion) {
         this.towerSmoke -= dt;
         if (this.towerSmoke <= 0 && this.fx.length < 100) { this.towerSmoke = 0.35; this.fx.push({ kind: 'img', key: 'fx_smoke', x1: 0, y1: 0, x2: x + (Math.random() - 0.5) * 16 * s, y2: y - 24 * s, t: 0, dur: 1.2, color: 0xffffff, r: 18 * s, w1: 42 * s }); }
       }
@@ -482,7 +490,7 @@ export class BattleScene extends Phaser.Scene {
           this.towerFlash[e.towerOf][e.side ?? 0] = 1;
           if (e.dmg) this.addNumber(`t${e.towerOf}${e.side}`, tx, tp.y - 70 * tp.s, e.dmg, 0xffd9a0);
         } else {
-          const q = this.proj(e.tx, e.ty); tx = q.x; ty = q.y - 14; ts = q.s; this.baseFlash[e.baseOf as 0 | 1] = 1;
+          const q = this.proj(e.tx, e.ty); tx = q.x; ty = q.y - 14; ts = q.s; this.baseFlash[e.baseOf as 0 | 1] = 1; this.towerFlash[e.baseOf as 0 | 1][SIDES] = 1;
           play('hit', 80); if (e.baseOf === 0 && !calm) this.cameras.main.shake(70, 0.003);
         }
         const fx = FAMILY_FX[e.family] ?? FAMILY_FX.gatling;
@@ -494,7 +502,7 @@ export class BattleScene extends Phaser.Scene {
         // 총구: 내 유닛(뒷모습)은 위쪽을 향해 쏜다
         const mine = av ? av.face === 1 : true;
         const mx = a.x + (mine ? a.s * 10 : -a.s * 10), my = a.y - a.h * a.s * (mine ? 0.66 : 0.42);
-        const ang = Math.atan2(ty - my, tx - mx), wk = this.W / 390;
+        const ang = Math.atan2(ty - my, tx - mx), wk = this.fxK;
         const delay = (n: number) => -n * 0.05;
         if (fx.kick > 0 && e.family !== 'blade') this.fx.push({ kind: 'flash', x1: mx, y1: my, x2: mx, y2: my, t: 0, dur: 0.12, color: fx.color, r: (7 + fx.kick * 6) * a.s * wk, rot: ang + Math.PI / 2 });
         if (e.family === 'laser') {
@@ -517,15 +525,16 @@ export class BattleScene extends Phaser.Scene {
       } else if (e.type === 'tower') {
         const tp = this.towerXY(e.team, e.side), tgt = this.posOf(e.to, b); if (!tgt) continue;
         const tv = this.views.get(e.to); if (tv) { this.flashView(tv); tv.hpShow = 1.4; tv.shake = Math.max(tv.shake, 0.5); }
-        this.towerKick[e.team][e.side] = 1;
-        const mx = tp.x, my = tp.y - 46 * tp.s, tx = tgt.x, ty = tgt.y - tgt.h * 0.4 * tgt.s, wk = this.W / 390;
+        const slot = e.side < 0 ? SIDES : e.side;
+        this.towerKick[e.team][slot] = 1;
+        const mx = tp.x, my = tp.y - (e.side < 0 ? 78 : 46) * tp.s, tx = tgt.x, ty = tgt.y - tgt.h * 0.4 * tgt.s, wk = this.fxK;
         this.fx.push({ kind: 'flash', x1: mx, y1: my, x2: mx, y2: my, t: 0, dur: 0.12, color: 0xffe07a, r: 10 * tp.s * wk, rot: Math.atan2(ty - my, tx - mx) + Math.PI / 2 });
         this.fx.push({ kind: 'proj', key: 'pj_shell', x1: mx, y1: my, x2: tx, y2: ty, t: 0, dur: 0.2, color: 0xffe07a, r: 34 * tp.s * wk, arc: 0.06 * Math.hypot(tx - mx, ty - my), rot: Math.atan2(ty - my, tx - mx) });
         this.fx.push({ kind: 'spark', x1: tx, y1: ty, x2: tx, y2: ty, t: 0.18, dur: 0.2, color: 0xfff3b0, r: 10 * tgt.s * wk });
         this.addNumber('u' + e.to, tx, tgt.y - tgt.h * tgt.s - 10, e.dmg, tgt.x ? (tv && tv.unit.team === 0 ? 0xff8a6b : 0xfff3b0) : 0xffffff);
         play('gatling', 160);
       } else if (e.type === 'towerDown') {
-        const tp = this.towerXY(e.team, e.side), wk = this.W / 390;
+        const tp = this.towerXY(e.team, e.side), wk = this.fxK;
         for (let i = 0; i < 5; i++) this.fx.push({ kind: 'blast', x1: 0, y1: 0, x2: tp.x + (i - 2) * 16 * tp.s, y2: tp.y - 26 * tp.s - (i % 2) * 20 * tp.s, t: i * 0.08, dur: 0.55, color: 0xffa94d, r: 46 * tp.s * wk });
         this.fx.push({ kind: 'ring', x1: tp.x, y1: tp.y, x2: tp.x, y2: tp.y, t: 0, dur: 0.6, color: 0xffd7a0, r: 70 * tp.s * wk });
         play('baseHit'); play('boom', 0); buzz('heavy');
@@ -536,7 +545,7 @@ export class BattleScene extends Phaser.Scene {
         const col = e.team === 0 ? 0x5fd3ff : 0xff7a45;
         this.fx.push({ kind: 'puff', x1: x, y1: y, x2: x, y2: y, t: 0, dur: 0.5, color: col, r: 34 * s });
         this.fx.push({ kind: 'debris', x1: x, y1: y, x2: x, y2: y, t: 0, dur: 0.7, color: 0xb9c3d1, r: 46 * s });
-        this.fx.push({ kind: 'img', key: 'fx_smoke', x1: 0, y1: 0, x2: x, y2: y - 10 * s, t: 0.1, dur: 0.9, color: 0xffffff, r: 22 * s * (this.W / 390), w1: 52 * s * (this.W / 390) });
+        this.fx.push({ kind: 'img', key: 'fx_smoke', x1: 0, y1: 0, x2: x, y2: y - 10 * s, t: 0.1, dur: 0.9, color: 0xffffff, r: 22 * s * (this.fxK), w1: 52 * s * (this.fxK) });
         this.fx.push({ kind: 'ring', x1: x, y1: y + 10 * s, x2: x, y2: y + 10 * s, t: 0, dur: 0.4, color: 0xffd7a0, r: 40 * s });
         play('boom', 110);
         if (e.team === 1) this.onKill(b.seconds);
@@ -823,8 +832,8 @@ export class BattleScene extends Phaser.Scene {
 
   private plate(g: Phaser.GameObjects.Graphics, team: 0 | 1, hpFrac: number, flash: number) {
     // 기지 문: 육각 철문 + 팀 색 테두리 + 20칸 체력 막대 + 가운데 숫자 (Stitch 시안의 「기지 게이트」)
-    const near = team === 0, bp = basePos(team), q = this.proj(bp.x, bp.y), cx = q.x, y = q.y;
-    const hw = this.pxX(q.t) * 4.3, hh = 15 * q.s + 4, ch = 11 * q.s + 2;
+    const near = team === 0, bp = basePos(team), q = this.proj(bp.x, bp.y), cx = q.x, y = q.y + 10 * q.s;
+    const hw = this.pxX(q.t) * 3.1, hh = 12 * q.s + 3, ch = 9 * q.s + 2;
     const col = near ? 0x5fd3ff : 0xff7a45, N = 20, f = Math.max(0, Math.min(1, hpFrac));
     const hex = (grow: number): Phaser.Geom.Point[] => [[-hw + ch + grow, -hh - grow], [hw - ch - grow, -hh - grow], [hw + grow, 0], [hw - ch - grow, hh + grow], [-hw + ch + grow, hh + grow], [-hw - grow, 0]].map(([dx, dy]) => new Phaser.Geom.Point(cx + dx, y + dy));
     g.fillStyle(col, 0.1); g.fillPoints(hex(9), true);                                  // 바깥 빛
@@ -840,7 +849,7 @@ export class BattleScene extends Phaser.Scene {
     for (const sx of [-1, 1]) { g.fillStyle(col, 0.9); g.fillCircle(cx + sx * (hw - ch - 2), y, 2.5); }   // 양끝 볼트
     if (flash > 0) { g.fillStyle(0xffffff, 0.5 * flash); g.fillPoints(hex(0), true); }
     const k = team, label = Math.max(0, Math.ceil(this.cfg.battle.baseHp[team]));
-    if (!this.baseTxt[k]) this.baseTxt[k] = this.add.text(cx, y, '', { fontFamily: 'Black Han Sans, Noto Sans KR, sans-serif', fontSize: near ? '15px' : '12px', color: '#ffffff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(7);
+    if (!this.baseTxt[k]) this.baseTxt[k] = this.add.text(cx, y, '', { fontFamily: 'Black Han Sans, Noto Sans KR, sans-serif', fontSize: near ? '13px' : '11px', color: '#ffffff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(90001);
     this.baseTxt[k]!.setText(String(label)).setPosition(cx, y - 1);
   }
 
@@ -873,12 +882,13 @@ export class BattleScene extends Phaser.Scene {
     const dt = delta / 1000, now = this.time.now / 1000;
     const lg = this.laneG; lg.clear();
     const gg = this.groundG; gg.clear();
+    const pg = this.plateG; pg.clear();
     const g = this.fxG; g.clear();
     this.drawPlacement(b, lg, now);
     // 기지
     for (const team of [1, 0] as const) {
       this.baseFlash[team] = Math.max(0, this.baseFlash[team] - dt * 4);
-      this.plate(gg, team, Math.max(0, b.baseHp[team] / 1000), this.baseFlash[team]);
+      this.plate(pg, team, Math.max(0, b.baseHp[team] / 1000), this.baseFlash[team]);
     }
     // 지속 효과 표시: 내 기지 보호막 · 유닛 발밑 고리
     for (const t of [0, 1] as const) {

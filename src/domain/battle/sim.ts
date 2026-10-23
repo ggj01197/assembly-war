@@ -90,7 +90,7 @@ export type BattleEvent =
   | { type: 'spawn'; unit: number; team: Team; x: number; y: number }
   | { type: 'attack'; from: number; to: number | null; baseOf: Team | null; towerOf?: Team; side?: number; /** 맞는 곳(타일) */ tx: number; ty: number; family: string; /** 실제로 들어간 피해(치료는 회복량) — 화면 숫자용 */ dmg?: number }
   | { type: 'die'; unit: number; team: Team; x: number; y: number }
-  | { type: 'tower'; team: Team; side: number; to: number; dmg: number }          // 포탑이 유닛을 쏨
+  | { type: 'tower'; team: Team; side: number; to: number; dmg: number }          // 포탑이 유닛을 쏨 (side −1 = 메인 타워=기지)
   | { type: 'towerDown'; team: Team; side: number }                  // 포탑 파괴 (team = 무너진 쪽)
   | { type: 'skill'; team: Team; skill: string; x: number; y: number; unit: number | null }
   | { type: 'module'; team: Team; id: string };
@@ -148,6 +148,9 @@ export const TOWER_HP = 420;
 export const TOWER_ARMOR = 15;
 export const TOWER_DMG = 18;
 export const TOWER_RATE = 1;        // 초당 1발
+export const BASE_DMG = 26;          // 메인 타워(기지)도 공격 건물: 포탑보다 강하고 멀리 쏜다
+export const BASE_RATE = 0.8;
+export const BASE_RANGE = 8;
 export const TOWER_RANGE = 7;       // 부품 사거리 단위 (= 5.7 타일, 중거리 무기와 같다 — 밖에서 일방적으로 못 깎게)
 export const SURVIVAL_SECONDS = 300;
 export const WAVE_SECONDS = 15;
@@ -180,6 +183,7 @@ export class Battle {
   readonly decks: [Prepared[], Prepared[]];
   readonly units: Unit[] = [];
   readonly baseHp: [number, number] = [BASE_HP, BASE_HP];
+  readonly baseCd: [number, number] = [0, 0];
   readonly watt: [number, number] = [WATT_POOL / 2, WATT_POOL / 2];
   readonly spawned: [number, number] = [0, 0];
   readonly kills: [number, number] = [0, 0];
@@ -529,6 +533,24 @@ export class Battle {
           } else tw.cd = 0;
         }
       }
+    }
+    // 3-c. 메인 타워(기지) 사격: 포탑과 같은 방식, 더 멀리·더 세게 (버티기의 적 기지는 쏘지 않음)
+    for (const t of [0, 1] as Team[]) {
+      if (!this.towersOn || this.baseHp[t] <= 0 || (this.survival && t === 1)) continue;   // towers:false = 방어 건물 없는 연습 모드
+      this.baseCd[t] -= 1; if (this.baseCd[t] > 0) continue;
+      const bp = basePos(t), rng = BASE_RANGE * RANGE_UNIT * (1 + this.mod[t].range);
+      let tgt: Unit | null = null, best = Infinity;
+      for (const e of order) {
+        if (e.team === t || e.hp <= 0) continue;
+        const d = Math.hypot(e.x - bp.x, e.y - bp.y) - e.r;
+        if (d <= rng && (d < best || (d === best && tgt && e.id < tgt.id))) { best = d; tgt = e; }
+      }
+      if (tgt) {
+        const td = Math.max(1, BASE_DMG * (1 + this.mod[t].dmg) * (1 - this.armorOf(tgt) / 100));
+        unitDamage.set(tgt.id, (unitDamage.get(tgt.id) ?? 0) + td);
+        this.events.push({ type: 'tower', team: t, side: -1, to: tgt.id, dmg: td });
+        this.baseCd[t] = Math.round(TICK_HZ / BASE_RATE);
+      } else this.baseCd[t] = 0;
     }
     for (const u of units) {
       const d = unitDamage.get(u.id);

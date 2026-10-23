@@ -194,10 +194,10 @@ export class BattleHud {
     }
   }
 
-  /** 전장이 쓸 수 있는 세로 구간 (HTML 위·아래 가림막 높이) */
+  /** 전장이 쓸 수 있는 세로 구간: top = 위쪽 HUD 가 시작하는 y(안전 영역 아래), tray = 아래 카드 줄 높이 */
   metrics(): { top: number; tray: number } {
-    const top = this.el.querySelector('.bt-top') as HTMLElement | null, tray = this.el.querySelector('.bt-tray') as HTMLElement | null;
-    return { top: top ? top.getBoundingClientRect().bottom + 4 : 84, tray: tray ? window.innerHeight - tray.getBoundingClientRect().top : 176 };
+    const top = this.el.querySelector('.bt-top .quit') as HTMLElement | null, tray = this.el.querySelector('.bt-tray') as HTMLElement | null;
+    return { top: top ? top.getBoundingClientRect().top : 8, tray: tray ? window.innerHeight - tray.getBoundingClientRect().top : 176 };
   }
 
   hide(): void { this.el.hidden = true; this.hideOffer(); if (this.hintT) clearTimeout(this.hintT); }

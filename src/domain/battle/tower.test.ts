@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Battle, TICK_HZ, TOWER_HP, BASE_HP, towerPos, type Deck } from './sim';
+import { Battle, TICK_HZ, TOWER_HP, BASE_HP, towerPos, basePos, type Deck } from './sim';
 import { PARTS } from '../../data/parts';
 
 const biped = { legs: 'legs_biped_light', body: 'body_arm_scout', weapon: 'wpn_arm_gatling' };
@@ -83,5 +83,20 @@ describe('길 포탑 · 왕관 (클래시 로얄식)', () => {
     put(b, 0, 0, 9, 12); run(b, 60);
     expect(b.baseHp[1]).toBeLessThan(BASE_HP);
     expect(b.crowns(0)).toBe(0);
+  });
+
+  it('메인 타워(기지)도 공격 건물: 사거리 안의 적 유닛을 쏘고 사이드 포탑보다 멀리 닿는다', () => {
+    const b = mk(deck(biped), deck(biped));
+    const bp = basePos(1), e = put(b, 0, 0, 9, 12);   // 내 유닛을 적 기지 앞에 둔다 (사이드 포탑 사거리 밖 가운데)
+    e.x = bp.x; e.y = bp.y - 6.2; e.px = e.x; e.py = e.y; e.stats = { ...e.stats, speed: 0.001, dmg: 0.1 };
+    let shots = 0; for (let i = 0; i < 6 * TICK_HZ; i++) { b.step(); for (const ev of b.events) if (ev.type === 'tower' && ev.side === -1 && ev.team === 1) shots++; }
+    expect(shots).toBeGreaterThan(2); expect(e.hp).toBeLessThan(e.maxHp);
+  });
+
+  it('towers:false(연습)와 버티기의 적 기지는 쏘지 않는다', () => {
+    const b = mk(deck(biped), deck(biped), { towers: false });
+    const bp = basePos(1), e = put(b, 0, 0, 9, 12); e.x = bp.x; e.y = bp.y - 5; e.px = e.x; e.py = e.y; e.stats = { ...e.stats, speed: 0.001, dmg: 0.1 };
+    let shots = 0; for (let i = 0; i < 4 * TICK_HZ; i++) { b.step(); for (const ev of b.events) if (ev.type === 'tower') shots++; }
+    expect(shots).toBe(0);
   });
 });
