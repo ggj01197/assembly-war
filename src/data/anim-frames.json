@@ -21,6 +21,50 @@
    "front"
   ]
  },
+ "legs_flyer": {
+  "m": [
+   88,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_hover": {
+  "m": [
+   78,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_hover_heavy": {
+  "m": [
+   85,
+   23,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_quad_siege": {
+  "m": [
+   89,
+   28,
+   14
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
  "legs_quad_walker": {
   "m": [
    86,
@@ -28,6 +72,62 @@
    13
   ],
   "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_track_fortress": {
+  "m": [
+   87,
+   23,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_track_heavy": {
+  "m": [
+   84,
+   25,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_track_light": {
+  "m": [
+   81,
+   22,
+   11
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_wheel_heavy": {
+  "m": [
+   89,
+   24,
+   12
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_wheel_scout": {
+  "m": [
+   76,
+   20,
+   10
+  ],
+  "sides": [
+   "back",
    "front"
   ]
  }
