@@ -3,6 +3,7 @@
  * iOS 는 사람이 한 번 건드린 뒤에야 소리가 나므로 touchend·click·pointerdown 마다 깨운다 (룬 헌터 TD-084).
  * 5단계에서 ElevenLabs 파일이 생기면 같은 이름으로 바꿔 끼운다. BGM 도 그때 추가한다.
  */
+import { App } from '@capacitor/app';
 type Opt = { type?: OscillatorType; to?: number | null; a?: number };
 type NOpt = { type?: BiquadFilterType; f?: number; to?: number | null; q?: number; a?: number };
 
@@ -39,6 +40,11 @@ document.addEventListener('visibilitychange', () => {
   if (!ctx) return;
   if (document.hidden) void ctx.suspend(); else void ctx.resume();
 });
+/** 앱을 나가면(홈 버튼·앱 전환) 소리를 멈춘다 — DOM visibilitychange 만으로는 iOS 앱에서 늦거나 안 올 수 있다 (STUDIO_LEARNINGS B-5). 돌아오면 현재 곡만 이어서. */
+void App.addListener('appStateChange', ({ isActive }) => {
+  if (!ctx) return;
+  if (!isActive) void ctx.suspend(); else if (!document.hidden) void ctx.resume();
+}).catch(() => { /* 웹(브라우저)에서는 리스너가 없어도 된다 */ });
 
 function env(g: GainNode, t: number, a: number, d: number, peak: number) {
   g.gain.setValueAtTime(0.0001, t);
