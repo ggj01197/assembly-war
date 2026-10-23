@@ -1,6 +1,7 @@
 import type { Battle, ModuleOffer } from '../domain/battle/sim';
 import type { Build } from '../domain/assemble';
 import { moduleById, CAT_LABEL, type ModuleDef } from '../domain/modules';
+import { matchupTip } from '../domain/blueprints';
 import type { Stage } from '../data/stages';
 import { WATT_POOL } from '../domain/battle/sim';
 import { unitFit, esc, partName } from './unitView';
@@ -40,12 +41,13 @@ export class BattleHud {
     this.cellW = Math.max(26, Math.min(44, Math.floor((window.innerWidth - 20 - 28) / (battle.handOn ? 7 : 8)) - 6));
     const slots = battle.handOn ? battle.hand[0] : battle.decks[0].map((_, i) => i);
     this.handOn = battle.handOn;
+    const tip = stage.survival ? '' : matchupTip(stage.enemy, battle.decks[0].map(c => c.build));
     this.el.innerHTML = `
       <header class="bt-top">
         <button class="quit" type="button" aria-label="나가기"><span aria-hidden="true">‹</span><small>나가기</small></button>
         <div class="bt-mid"><b id="btTime">3:00</b><i class="crowns" id="btCrowns"></i><small id="btSub">${stage.survival ? '5분 버티기 · 웨이브 1' : `작전 ${stageLabel(stage)} · ${esc(stage.name)}`}${battle.rule ? ` · ${battle.rule.icon} ${esc(battle.rule.name)}` : ''}</small></div>
       </header>
-      <div class="bt-hint" id="btHint">${battle.rule ? `<b>${battle.rule.icon} ${esc(battle.rule.name)}</b> ${esc(battle.rule.desc)}<br>` : ''}${esc(stage.hint)}</div>
+      <div class="bt-hint" id="btHint">${battle.rule ? `<b>${battle.rule.icon} ${esc(battle.rule.name)}</b> ${esc(battle.rule.desc)}<br>` : ''}${esc(stage.hint)}${tip ? `<br><b class="tip">${esc(tip)}</b>` : ''}</div>
       <div class="bt-toast" id="btToast"></div>
       <footer class="bt-tray">
         <div class="bt-watt ${battle.hero[0] ? 'has-hero' : ''}"><i class="wfill"><u id="btWatt"></u><s></s></i><b id="btWattN">5</b><small>와트</small>${battle.hero[0] ? `<div class="bt-hero">

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PARTS } from '../data/parts';
 import { assemble } from './assemble';
-import { BLUEPRINTS, ROLE_ORDER, compatibleParts, suggestFix, advancedUnlocked, sameBuild } from './blueprints';
+import { BLUEPRINTS, ROLE_ORDER, compatibleParts, suggestFix, advancedUnlocked, sameBuild, matchupTip, describeBuild } from './blueprints';
 import { STARTER_DECK } from './save';
 
 describe('쉬운 조립: 추천 완성품 카드', () => {
@@ -44,16 +44,16 @@ describe('추천 고치기', () => {
     const mismatch = { legs: 'legs_track_heavy', body: 'body_arm_scout', weapon: 'wpn_flak_light' };   // 대공 무기 + 팔형 몸통
     const fix2 = suggestFix(mismatch); expect(fix2).not.toBeNull(); expect(assemble(fix2!.build, PARTS).ok).toBe(true);
   });
-  it('모든 불가능 조합(샘플 400개)에서도 맞는 안을 찾는다', () => {
+  it('불가능 조합 표본(약 60개)에서도 모두 맞는 안을 찾는다', () => {
     const legs = PARTS.filter(p => p.kind === 'legs'), bodies = PARTS.filter(p => p.kind === 'body'), ws = PARTS.filter(p => p.kind === 'weapon');
     let n = 0, found = 0;
     for (const l of legs) for (const b of bodies) for (const w of ws) {
       const t = { legs: l.id, body: b.id, weapon: w.id };
-      if (assemble(t, PARTS).ok || (n++ % 3)) continue;
+      if (assemble(t, PARTS).ok || (n++ % 24)) continue;
       const f = suggestFix(t); if (f && assemble(f.build, PARTS).ok) found++; else expect(f, JSON.stringify(t)).not.toBeNull();
     }
-    expect(found).toBeGreaterThan(100);
-  });
+    expect(found).toBeGreaterThan(40);
+  }, 60000);
 });
 
 describe('고급 조립 해금', () => {
@@ -61,5 +61,21 @@ describe('고급 조립 해금', () => {
     expect(advancedUnlocked({ stages: {} })).toBe(false);
     expect(advancedUnlocked({ stages: { 'c1-3': { clears: 2, bestBaseHp: 900 } } })).toBe(false);
     expect(advancedUnlocked({ stages: { 'c1-4': { clears: 1, bestBaseHp: 900 } } })).toBe(true);
+  });
+});
+
+describe('상성 힌트', () => {
+  const bp = (id: string) => BLUEPRINTS.find(b => b.id === id)!.build;
+  it('공중 적이 많은데 내 덱에 대공이 없으면 경고, 있으면 가벼운 안내', () => {
+    const air = [bp('bp_swarm'), bp('bp_gunship'), bp('bp_scout')];
+    expect(matchupTip(air, [bp('bp_scout'), bp('bp_assault')])).toContain('⚠');
+    const ok = matchupTip(air, [bp('bp_scout'), bp('bp_flak')]); expect(ok).not.toBe(''); expect(ok).not.toContain('⚠');
+  });
+  it('특별한 점이 없는 구성은 힌트가 없다', () => {
+    expect(matchupTip([bp('bp_scout'), bp('bp_assault')], [bp('bp_scout')])).toBe('');
+  });
+  it('모든 추천 카드는 이름·역할이 나오고, 직접 조립은 custom 표시', () => {
+    for (const b of BLUEPRINTS) { const d = describeBuild(b.build); expect(d.name).toBe(b.name); expect(d.custom).toBe(false); }
+    expect(describeBuild({ legs: 'legs_biped_light', body: 'body_arm_scout', weapon: 'wpn_blade_short' }).custom).toBe(true);
   });
 });

@@ -88,3 +88,21 @@ export function describeBuild(build: Build): { name: string; role: Role; custom:
   const role: Role = fam === 'repair' ? 'support' : fam === 'flak' ? 'antiair' : air ? 'air' : fam === 'blade' ? 'melee' : fam === 'mortar' || fam === 'cannon' ? 'siege' : 'ranged';
   return { name: w?.name ?? build.weapon, role, custom: true };
 }
+
+/**
+ * 작전 시작 때 보여 주는 상성 힌트: 적 구성을 보고 어떤 카드가 잘 맞는지 한 줄로 알려 준다 (조립이 어려운 사람도 덱을 고칠 수 있게).
+ * 내 덱에 필요한 역할이 없으면 그 사실을 먼저 말한다. 힌트가 필요 없으면 빈 문자열.
+ */
+export function matchupTip(enemy: Build[], mine: Build[]): string {
+  const st = (b: Build) => assemble(b, PARTS).stats;
+  const es = enemy.map(st).filter((x): x is NonNullable<ReturnType<typeof st>> => !!x), ms = mine.map(st).filter((x): x is NonNullable<ReturnType<typeof st>> => !!x);
+  const air = es.filter(x => x.move === 'air').length;
+  const siege = es.filter(x => x.range >= 7).length;
+  const armored = es.filter(x => x.armor >= 25).length;
+  const myAA = ms.filter(x => x.target !== 'ground').length;
+  const myPierce = ms.filter(x => x.pierce >= 0.4 || x.dmg >= 40).length;
+  if (air >= 2) return myAA === 0 ? '⚠ 공중 적이 많은데 내 덱에는 대공이 없어요! 🔧 유닛 바꾸기에서 「대공」 카드를 넣어 보세요.' : '공중 적이 많아요. 대공·미사일 카드를 먼저 내세요.';
+  if (siege >= 2) return '멀리서 포격하는 적이 있어요. 빠른 유닛이나 공중 유닛으로 파고들어 보세요.';
+  if (armored >= 2) return myPierce === 0 ? '⚠ 단단한 적이 많아요. 레이저·대검·공성 캐넌처럼 센 한 방 카드가 필요해요.' : '단단한 적이 많아요. 센 한 방 카드를 아끼지 마세요.';
+  return '';
+}
