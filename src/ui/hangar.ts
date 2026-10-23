@@ -90,7 +90,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       </section>
       ${operatorHtml(s)}
       <footer class="hg-actions">
-        <button class="btn ${guideAssemble ? 'pulse' : ''}" id="hgAssemble" type="button">🔧 조립${guideAssemble ? '<em>NEW</em>' : ''}</button>
+        <button class="btn ${guideAssemble ? 'pulse' : ''}" id="hgAssemble" type="button">🔧 유닛 바꾸기${guideAssemble ? '<em>NEW</em>' : ''}</button>
         <button class="btn" id="hgGear" type="button">🎖 장비</button>
         <button class="btn primary big sortie ${guideSortie ? 'pulse' : ''}" id="hgSortie" type="button"><b>출격</b><small>SORTIE</small><i aria-hidden="true">▶▶</i></button>
       </footer>

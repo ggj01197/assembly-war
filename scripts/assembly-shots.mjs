@@ -1,0 +1,26 @@
+// 쉬운/고급 조립 화면 점검 (개발 서버 5190 필요)  node scripts/assembly-shots.mjs [폭=390] [높이=844]
+import { chromium } from 'playwright-core';
+import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const W = Number(process.argv[2] ?? 390), H = Number(process.argv[3] ?? 844);
+const OUT = fileURLToPath(new URL('../../00_PROJECT_CONTROL/shots/', import.meta.url));
+mkdirSync(OUT, { recursive: true });
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+const errors = [];
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
+const shot = async n => { await page.waitForTimeout(500); await page.screenshot({ path: `${OUT}/${W}x${H}_as_${n}.png` }); console.log('shot', n); };
+await page.evaluate(() => window.__aw.nav.openAssembly(0));
+await shot('1_easy_cards');
+await page.locator('.bpcard').nth(3).click(); await shot('2_pick_card');
+await page.locator('.as-tabs button[data-k="weapon"]').click(); await shot('3_easy_weapon');
+await page.locator('.as-mode').click(); await shot('4_locked_msg');
+await page.evaluate(() => { const s = window.__aw.store; s.getState().save.stages['c1-4'] = { clears: 1, bestBaseHp: 900 }; });
+await page.evaluate(() => window.__aw.nav.goHangar(0)); await page.evaluate(() => window.__aw.nav.openAssembly(0));
+await page.locator('.as-mode').click(); await shot('5_advanced');
+console.log('errors', errors.length, errors.slice(0, 5));
+await browser.close();
