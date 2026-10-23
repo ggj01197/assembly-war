@@ -90,6 +90,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
         ${s.deck.map((d, i) => { const w = assemble(d, PARTS).watt; return `<button class="slot ${i === sel ? 'on' : ''}" data-i="${i}" type="button" aria-label="설계도 ${i + 1}">${unitFit(d, 50, 54)}<i>${w}</i></button>`; }).join('')}
       </section>
       ${operatorHtml(s)}
+      <button class="hg-run" id="hgRun" type="button"><b>⚔ 새 모드 · 조립 런</b><small>부품을 사서 조립하고, 자동 전투를 구경하는 3라운드 (베타)</small></button>
       <footer class="hg-actions">
         <button class="btn ${guideAssemble ? 'pulse' : ''}" id="hgAssemble" type="button">🔧 유닛 바꾸기${guideAssemble ? '<em>NEW</em>' : ''}</button>
         <button class="btn" id="hgGear" type="button">🎖 장비</button>
@@ -106,6 +107,7 @@ export function mountHangar(root: HTMLElement, nav: Nav): Screen {
       ${sheet === 'stage' ? stageSheet() : sheet === 'gear' ? gearSheet() : sheet === 'supply' ? supplyHtml(sst, Date.now()) : sheet === 'odds' ? oddsHtml() : sheet === 'upgrade' ? upgradeHtml(sst) : sheet === 'shop' ? shopHtml() : sheet === 'missions' ? missionsHtml(sst.msTab ?? 'daily') : sheet === 'attend' ? attendHtml() : sheet === 'season' ? seasonHtml() : sheet === 'story' ? storyHtml() : ''}`;
 
     el.querySelectorAll<HTMLButtonElement>('.slot').forEach(b2 => b2.onclick = () => { sel = Number(b2.dataset.i); play('uiClick'); render(); });
+    (el.querySelector('#hgRun') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openRun(); };
     (el.querySelector('#hgAssemble') as HTMLButtonElement).onclick = () => { play('uiClick'); nav.openAssembly(sel); };
     (el.querySelector('#hgSortie') as HTMLButtonElement).onclick = () => {
       play('uiClick'); sheet = 'stage';

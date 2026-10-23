@@ -134,7 +134,15 @@ export interface BattleOptions {
   hand?: boolean;
   /** 시작 기지 체력(보스 러시에서 앞 판 체력을 이어 받는다) */
   startHp?: [number, number];
+  /**
+   * 조립 런(2026-10-23, REDESIGN_PLAN_v0 안 1)의 한 라운드: 카드(= 메카) 한 장당 유닛 한 기를 정해진 자리에 놓고 시작해 **자동으로** 끝까지 싸운다.
+   * 와트·손패·봇·포탑·기지가 없고, 모든 유닛이 가장 가까운 적을 곧장 노린다. 한쪽이 전멸하거나 시간이 다 되면 끝(시간이 다 되면 남은 체력 비율이 높은 쪽).
+   */
+  skirmish?: { mine: SkirmishUnit[]; foe: SkirmishUnit[]; limitSec?: number };
 }
+/** 조립 런 전투에서 유닛을 놓는 자리: card = 그 팀 덱의 카드 번호 */
+export interface SkirmishUnit { card: number; x: number; y: number; /** 체력·공격 배율 (런의 ★ 합성 보너스, 기본 1) */ mult?: number }
+export const SKIRMISH_LIMIT_SEC = 45;
 
 export const HAND_SIZE = 4;
 
@@ -243,6 +251,8 @@ export class Battle {
   private matchSec = MATCH_SECONDS;
   private maxTicks = (MATCH_SECONDS + OVERTIME_SECONDS) * TICK_HZ;
   readonly survival: boolean;
+  /** 조립 런 자동 전투 판인가 */
+  readonly skirmishMode: boolean;
   private boss: { def: BossDef; spawned: boolean; unit: number | null; nextTick: number } | null = null;
 
   constructor(deckA: Deck, deckB: Deck, parts: Part[], seed: number, opts: BattleOptions = {}) {
@@ -258,10 +268,21 @@ export class Battle {
     this.bots = opts.bots ?? [true, true];
     this.wattMult = opts.wattMult ?? [1, 1];
     this.survival = !!opts.survival;
-    this.towersOn = opts.towers !== false;
+    this.skirmishMode = !!opts.skirmish;
+    this.towersOn = opts.towers !== false && !this.skirmishMode;
     const th = Math.round(TOWER_HP * (this.rule?.id === 'rl_weak' ? WEAK_TOWER_MULT : 1));
     for (const t of [0, 1] as Team[]) this.towers[t] = Array.from({ length: SIDES }, (_, s) => ({ hp: th, maxHp: th, cd: 0, ...towerPos(t, s) }));
     if (this.survival) { this.matchSec = SURVIVAL_SECONDS; this.maxTicks = SURVIVAL_SECONDS * TICK_HZ; }
+    if (opts.skirmish) {
+      const lim = opts.skirmish.limitSec ?? SKIRMISH_LIMIT_SEC; this.matchSec = lim; this.maxTicks = lim * TICK_HZ; this.bots = [false, false];
+      for (const [t, list] of [[0, opts.skirmish.mine], [1, opts.skirmish.foe]] as [Team, SkirmishUnit[]][]) for (const k of list) {
+        const card = this.decks[t][k.card]; if (!card) continue;
+        const m = k.mult ?? 1, st = m === 1 ? card.stats : { ...card.stats, hp: Math.round(card.stats.hp * m), dmg: Math.round(card.stats.dmg * m * 100) / 100 };
+        const u = this.makeUnit(t, k.x, k.y, st, k.card, null);
+        this.units.push(u); this.spawned[t]++; this.spawnsByCard[t][k.card]++;
+        this.pre.push({ type: 'spawn', unit: u.id, team: t, x: k.x, y: k.y });
+      }
+    }
     const bd = opts.boss ? bossById(opts.boss) : undefined;
     if (bd) this.boss = { def: bd, spawned: false, unit: null, nextTick: 0 };
     if (this.handOn) {
@@ -288,7 +309,7 @@ export class Battle {
   unitById(id: number): Unit | undefined { return this.units.find(u => u.id === id); }
   /** 유닛의 실제 사거리·인식 거리(타일) — 모듈·규칙 반영 (화면의 사거리 표시용) */
   rangeOf(u: Pick<Unit, 'stats' | 'team'>): number { return rangeTiles(u.stats) * (1 + this.mod[u.team].range); }
-  aggroOf(u: Pick<Unit, 'stats' | 'team'>): number { return aggroTiles(u.stats, this.mod[u.team].sight) * (1 + this.mod[u.team].range * 0.5); }
+  aggroOf(u: Pick<Unit, 'stats' | 'team'>): number { if (this.skirmishMode) return 99; return aggroTiles(u.stats, this.mod[u.team].sight) * (1 + this.mod[u.team].range * 0.5); }
 
   get seconds(): number { return this.tick / TICK_HZ; }
   /** 팀 t 가 얻은 왕관 수 = 무너뜨린 상대 포탑 수 */
@@ -383,6 +404,11 @@ export class Battle {
       }
       u.tgt = lead ? { kind: 'u', id: lead.id } : null; return;
     }
+    if (this.skirmishMode) {   // 자동 전투: 가장 가까운 (때릴 수 있는) 적을 곧장 노린다
+      let nb: Target | null = null, nd = Infinity;
+      for (const e of this.units) { if (e.team !== foe || e.hp <= 0 || !canHit(u.stats, e.stats)) continue; const d = Math.hypot(e.x - u.x, e.y - u.y); if (d < nd || (d === nd && nb && nb.kind === 'u' && e.id < nb.id)) { nd = d; nb = { kind: 'u', id: e.id }; } }
+      u.tgt = nb; return;
+    }
     let best: Target | null = null, bd = Infinity;
     const cur = u.tgt && u.tgt.kind === 'u' ? this.unitById(u.tgt.id) : null;
     for (const e of this.units) {
@@ -432,7 +458,7 @@ export class Battle {
     if (this.over) return false;
     const sec = this.tick / TICK_HZ;
     if (!this.overtime && sec >= this.matchSec) {
-      if (this.survival || this.baseHp[0] !== this.baseHp[1] || this.crowns(0) !== this.crowns(1)) { this.over = true; return false; }
+      if (this.skirmishMode || this.survival || this.baseHp[0] !== this.baseHp[1] || this.crowns(0) !== this.crowns(1)) { this.over = true; return false; }
       this.overtime = true; // 동률이면 연장
     }
     if (this.tick >= this.maxTicks) { this.over = true; return false; }
@@ -606,7 +632,7 @@ export class Battle {
             else if (dist > 2.6) goal = pos;                                              // 아니면 앞선 아군 곁을 따른다
           } else if (gap > range || gap < minR) goal = pos;
         }
-      } else if (!this.canHitBuildings(u)) {
+      } else if (!this.skirmishMode && !this.canHitBuildings(u)) {
         // 건물을 못 때리는 유닛(대공 전용): 적 진영 쪽으로 나아가되 포탑 사거리 밖에서 멈춘다
         const p = this.posOfTarget(this.objective(u));
         if (p && Math.hypot(p.x - u.x, p.y - u.y) > TOWER_RANGE * RANGE_UNIT + 1.5) goal = { x: p.x, y: p.y };
@@ -643,6 +669,7 @@ export class Battle {
 
     this.tick++;
     if (baseHp[0] <= 0 || baseHp[1] <= 0) this.over = true;
+    if (this.skirmishMode && (!units.some(u => u.team === 0) || !units.some(u => u.team === 1))) this.over = true;
     return !this.over;
   }
 
@@ -881,8 +908,15 @@ export class Battle {
   /** 왕관이 같을 때의 판정용: 살아 있는 포탑 체력 합 (포탑이 없는 연습 모드는 0) */
   private towerHpSum(team: Team): number { return this.towersOn ? this.towers[team].reduce((a, t) => a + Math.max(0, t.hp), 0) : 0; }
 
+  /** 조립 런 전투의 승자: 살아남은 쪽, 둘 다 남았으면 남은 체력 비율(합)이 큰 쪽, 같으면 무승부 */
+  private skirmishWinner(): Team | -1 {
+    const frac = (t: Team) => this.units.filter(u => u.team === t && u.hp > 0).reduce((a, u) => a + u.hp / u.maxHp, 0);
+    const a = frac(0), b = frac(1);
+    return a === b ? -1 : a > b ? 0 : 1;
+  }
+
   result(): BattleResult {
-    const winner: Team | -1 = this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] <= 0 || this.baseHp[1] <= 0 ? (this.baseHp[0] > this.baseHp[1] ? 0 : 1) : this.crowns(0) !== this.crowns(1) ? (this.crowns(0) > this.crowns(1) ? 0 : 1) : this.towerHpSum(0) !== this.towerHpSum(1) ? (this.towerHpSum(0) > this.towerHpSum(1) ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
+    const winner: Team | -1 = this.skirmishMode ? this.skirmishWinner() : this.survival ? (this.baseHp[0] > 0 ? 0 : 1) : this.baseHp[0] <= 0 || this.baseHp[1] <= 0 ? (this.baseHp[0] > this.baseHp[1] ? 0 : 1) : this.crowns(0) !== this.crowns(1) ? (this.crowns(0) > this.crowns(1) ? 0 : 1) : this.towerHpSum(0) !== this.towerHpSum(1) ? (this.towerHpSum(0) > this.towerHpSum(1) ? 0 : 1) : this.baseHp[0] === this.baseHp[1] ? -1 : this.baseHp[0] > this.baseHp[1] ? 0 : 1;
     return {
       winner, baseHp: [Math.max(0, this.baseHp[0]), Math.max(0, this.baseHp[1])], seconds: this.tick / TICK_HZ, overtime: this.overtime, crowns: [this.crowns(0), this.crowns(1)], skillUses: [...this.skillUses], heroDeploys: [...this.heroDeploys], wattSpent: [...this.wattSpent],
       spawned: [...this.spawned], kills: [...this.kills], spawnsByCard: [[...this.spawnsByCard[0]], [...this.spawnsByCard[1]]], damageByCard: [[...this.damageByCard[0]], [...this.damageByCard[1]]],

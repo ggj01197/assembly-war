@@ -1,0 +1,28 @@
+// 조립 런 점검: 격납고 → 조립 런 → (상점 구매·추천 조립) → 전투 → 결과 (개발 서버 5190 필요)  node scripts/run-shots.mjs [폭=390] [높이=844]
+import { chromium } from 'playwright-core';
+import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const W = Number(process.argv[2] ?? 390), H = Number(process.argv[3] ?? 844);
+const OUT = fileURLToPath(new URL('../../00_PROJECT_CONTROL/shots/', import.meta.url));
+mkdirSync(OUT, { recursive: true });
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+const errors = [];
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])', { timeout: 20000 });
+const shot = async n => { await page.waitForTimeout(600); await page.screenshot({ path: `${OUT}/${W}x${H}_run_${n}.png` }); console.log('shot', n); };
+await shot('0_hangar');
+await page.locator('#hgRun').click(); await page.waitForSelector('.screen.run:not([hidden])');
+await shot('1_build');
+for (const i of [0, 1, 2]) await page.locator('.rs-card[data-s]').first().click().catch(() => {});
+await page.locator('#rnAuto').click(); await shot('2_after_auto');
+await page.locator('#rnGo').click();
+await page.waitForSelector('.screen.battle.run-hud:not([hidden])'); await page.waitForTimeout(1800); await shot('3_battle_a');
+await page.waitForTimeout(3500); await shot('4_battle_b');
+await page.locator('.rb-speed button[data-s="skip"]').click();
+await page.waitForSelector('.rn-result', { timeout: 20000 }); await shot('5_result');
+console.log('errors', errors.length, errors.slice(0, 5));
+await browser.close();

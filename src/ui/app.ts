@@ -9,6 +9,10 @@ import { setSoundEnabled, setHapticsEnabled, playMusic, preloadMusic } from '../
 import { runOpening } from './opening';
 import { mountHangar } from './hangar';
 import { mountAssembly } from './assembly';
+import { mountRun } from './run';
+import { RunBattleHud } from './runHud';
+import type { BattlePlan } from '../domain/run/run';
+import type { Stage } from '../data/stages';
 import { mountResult, type ResultData } from './result';
 import { BattleHud } from './battleHud';
 import { commanderLevel } from '../domain/save';
@@ -27,6 +31,10 @@ export interface Nav {
   goHangar(sel?: number): void;
   openAssembly(slot: number): void;
   startBattle(stageId: string): void;
+  /** 조립 런 */
+  openRun(): void;
+  /** 조립 런 한 라운드의 자동 전투를 시작한다. 끝나면 done('win'|'lose'|'quit') */
+  runBattle(plan: BattlePlan, info: { round: number; rounds: number; hearts: number; seed: number }, done: (r: 'win' | 'lose' | 'quit') => void): void;
 }
 
 /** 화면 전환과 흐름: 오프닝 → 격납고 ↔ 조립 / 출격 → 전장 → 결과 → (다음 작전·다시 도전·조립·격납고) */
@@ -41,9 +49,12 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     goHangar: sel => { show('hangar', sel); },
     openAssembly: slot => { show('assembly', slot); },
     startBattle: id => { void startBattle(id); },
+    openRun: () => { show('run'); },
+    runBattle: (plan, info, done) => { runBattle(plan, info, done); },
   };
-  const screens = { hangar: mountHangar(root, nav), assembly: mountAssembly(root, nav), result: mountResult(root, nav) } as const;
+  const screens = { hangar: mountHangar(root, nav), assembly: mountAssembly(root, nav), result: mountResult(root, nav), run: mountRun(root, nav) } as const;
   const hud = new BattleHud(root);
+  const runHud = new RunBattleHud(root);
   type Name = keyof typeof screens;
   let current: Name | null = null;
 
@@ -70,6 +81,22 @@ export async function startApp(game: Phaser.Game): Promise<void> {
     current = name;
     playMusic('hangar');
     screens[name].show(arg);
+  }
+
+  /** 조립 런: 같은 전장 장면을 자동 전투 모드(skirmish)로 쓴다 */
+  function runBattle(plan: BattlePlan, info: { round: number; rounds: number; hearts: number; seed: number }, done: (r: 'win' | 'lose' | 'quit') => void) {
+    const s = store.getState().save;
+    const battle = new Battle(plan.mineDeck, plan.foeDeck, PARTS, info.seed, { skirmish: { mine: plan.mine, foe: plan.foe } });
+    if (current) screens[current].hide();
+    current = null;
+    runHud.configure(info);
+    playMusic('battle');
+    const back = (r: 'win' | 'lose' | 'quit') => { game.scene.stop('battle'); runHud.hide(); current = 'run'; playMusic('hangar'); done(r); };
+    game.scene.start('battle', {
+      stage: {} as Stage, battle, hud: runHud, reducedMotion: s.settings.reducedMotion, speed: runHud.speed, skip: runHud.skip,
+      onEnd: (b: Battle) => back(b.result().winner === 0 ? 'win' : 'lose'), onQuit: () => back('quit'),
+    });
+    (window as unknown as { __aw: { battle?: Battle } }).__aw.battle = battle;
   }
 
   /** 보스 러시: 앞 보스를 이긴 뒤 남은 기지 체력 */

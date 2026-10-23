@@ -15,7 +15,10 @@ import type { Stage } from '../../data/stages';
  * 규칙은 전부 `Battle`(domain)이 하고 이 씬은 그리기·연출·입력만 한다. 내 유닛은 뒷모습, 적 유닛은 앞모습으로 그린다.
  * 카드를 끌어다(또는 누른 뒤 눌러) 내 진영 어디든 놓을 수 있고, 놓는 동안 사거리(실선)·인식 거리(점선)가 보인다.
  */
-export interface BattleConfig { stage: Stage; battle: Battle; hud: BattleHud; reducedMotion: boolean; onEnd(b: Battle): void; onQuit(): void }
+/** 전투 화면이 쓰는 HUD 의 최소 모양 (일반 전투 HUD 와 조립 런 HUD 가 같이 쓴다) */
+export type BattleHudLike = Pick<BattleHud, 'setup' | 'metrics' | 'update' | 'toast' | 'combo' | 'bossBanner' | 'showOffer' | 'offering' | 'hide'>;
+/** hud 는 BattleHudLike. speed: 배속(1·2), skip: 건너뛰기(조립 런 자동 전투) */
+export interface BattleConfig { stage: Stage; battle: Battle; hud: BattleHudLike; reducedMotion: boolean; onEnd(b: Battle): void; onQuit(): void; speed?: () => number; skip?: () => boolean }
 
 type Move = 'walk' | 'wheel' | 'track' | 'hover' | 'fly';
 interface View {
@@ -98,6 +101,8 @@ export class BattleScene extends Phaser.Scene {
   private baseFlash: [number, number] = [0, 0];
   /** 메인 타워 건물 바로 아래(체력 문 자리)의 화면 y — 건물 그림 높이에 따라 매 프레임 갱신 */
   private basePlateY: [number, number] = [0, 0];
+  /** 조립 런 자동 전투: 아레나의 한가운데(아래 보이는 창)만 크게 보여 준다 */
+  private skirm = false; private vx0 = 0; private vx1 = ARENA_W; private vy0 = 0; private vy1 = ARENA_H;
   private fxK = 0.6; private W = 390; private H = 844; private y0 = 130; private y1 = 600; private k = 0.6;
   private firstSpawnHinted = false;
   private wattFull = false;
@@ -116,7 +121,7 @@ export class BattleScene extends Phaser.Scene {
 
   init(cfg: BattleConfig) {
     this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
-    this.baseFlash = [0, 0]; this.firstSpawnHinted = false; this.wattFull = false; this.dead = false; this.hover = null; this.bossText = null; this.baseTxt = [null, null];
+    this.baseFlash = [0, 0]; this.firstSpawnHinted = !!cfg.battle.skirmishMode; this.wattFull = false; this.dead = false; this.hover = null; this.bossText = null; this.baseTxt = [null, null];
     this.towerImgs = [[], []]; this.basePlateY = [0, 0]; this.towerKick = [[0, 0, 0], [0, 0, 0]]; this.towerFlash = [[0, 0, 0], [0, 0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
   }
 
@@ -188,31 +193,41 @@ export class BattleScene extends Phaser.Scene {
     this.W = this.scale.width; this.H = this.scale.height;
     const m = this.cfg.hud.metrics();
     // 화면 전체를 쓴다: 위쪽 HUD(나가기·시간)는 모서리에 겹쳐 있고, 바닥은 맨 위·맨 아래까지 이어진다
-    this.y0 = (m.top || TOP_H) + 46;                 // 적 쪽 끝(y = ARENA_H) — 적 메인 타워 그림이 화면 위로 안 나갈 만큼만 남긴다
-    this.y1 = this.H - (m.tray || TRAY_H) + 6;       // 내 쪽 끝(y = 0) — 카드 줄 바로 위
-    this.k = clamp(0.36 * (this.fxK), 0.26, 0.56);
+    this.skirm = !!this.cfg.battle.skirmishMode;
+    if (this.skirm) {
+      // 자동 전투: x 3.5~14.5 · y 1.5~13.5 만 보이게 크게 (유닛이 화면의 큰 부분을 차지한다)
+      this.vx0 = 3.5; this.vx1 = 14.5; this.vy0 = 1.5; this.vy1 = 13.5;
+      this.y0 = (m.top || TOP_H) + 60; this.y1 = this.H - (m.tray || 90) - 10;
+      this.k = clamp(0.62 * (this.W / 390), 0.42, 0.95);
+    } else {
+      this.vx0 = 0; this.vx1 = ARENA_W; this.vy0 = 0; this.vy1 = ARENA_H;
+      this.y0 = (m.top || TOP_H) + 46;                 // 적 쪽 끝(y = ARENA_H) — 적 메인 타워 그림이 화면 위로 안 나갈 만큼만 남긴다
+      this.y1 = this.H - (m.tray || TRAY_H) + 6;       // 내 쪽 끝(y = 0) — 카드 줄 바로 위
+      this.k = clamp(0.36 * (this.W / 390), 0.26, 0.56);
+    }
     this.fxK = this.k / 0.6;                         // 효과 크기 (유닛 크기에 비례)
   }
   private onResize() { this.layout(); this.drawStatic(); this.buildTowers(); }
-  private tOfY = (y: number) => y / ARENA_H;   // 아레나 밖(바닥 연장부)도 같은 비율로 이어진다
+  private tOfY = (y: number) => (y - this.vy0) / (this.vy1 - this.vy0);   // 아레나 밖(바닥 연장부)도 같은 비율로 이어진다
   private widthAt(t: number) { return lerp(this.W * NEAR_W, this.W * FAR_W, t); }
   private scaleAt(t: number) { return lerp(1, FAR_SCALE, t); }
   /** 타일 → 화면 */
-  private proj(x: number, y: number): Proj { const t = this.tOfY(y); return { x: this.W / 2 + ((x - ARENA_W / 2) / ARENA_W) * this.widthAt(t), y: lerp(this.y1, this.y0, t), s: this.scaleAt(t), t }; }
+  private proj(x: number, y: number): Proj { const t = this.tOfY(y); return { x: this.W / 2 + ((x - (this.vx0 + this.vx1) / 2) / (this.vx1 - this.vx0)) * this.widthAt(t), y: lerp(this.y1, this.y0, t), s: this.scaleAt(t), t }; }
   /** 화면 → 타일 */
   private unproj(sx: number, sy: number): { x: number; y: number } {
     const t = clamp((this.y1 - sy) / (this.y1 - this.y0), 0, 1);
-    return { x: ARENA_W / 2 + ((sx - this.W / 2) / this.widthAt(t)) * ARENA_W, y: t * ARENA_H };
+    return { x: (this.vx0 + this.vx1) / 2 + ((sx - this.W / 2) / this.widthAt(t)) * (this.vx1 - this.vx0), y: this.vy0 + t * (this.vy1 - this.vy0) };
   }
   /** 타일 한 칸의 화면 크기 (가로는 깊이에 따라, 세로는 일정) */
-  private pxX(t: number) { return this.widthAt(t) / ARENA_W; }
-  private get pxY() { return (this.y1 - this.y0) / ARENA_H; }
+  private pxX(t: number) { return this.widthAt(t) / (this.vx1 - this.vx0); }
+  private get pxY() { return (this.y1 - this.y0) / (this.vy1 - this.vy0); }
   private pt(...xy: [number, number][]): Phaser.Geom.Point[] { return xy.map(([x, y]) => { const p = this.proj(x, y); return new Phaser.Geom.Point(p.x, p.y); }); }
 
   private drawStatic() {
     this.children.getAll().filter(o => (o as Phaser.GameObjects.GameObject).name === 'bg').forEach(o => o.destroy());
     this.add.rectangle(this.W / 2, this.H / 2, this.W, this.H, 0x070d16, 1).setName('bg').setDepth(-20);
     const g = this.arenaG; g.clear();
+    if (this.skirm) { this.drawSkirmFloor(g); this.addVignette(); return; }
     // 바닥: 깊이마다 살짝 다른 어두운 금속색 띠 + 패널 이음선
     const EXT = 9;   // 아레나 위·아래로 바닥을 이어 화면 맨 위·맨 아래까지 채운다
     for (let i = -EXT; i < ARENA_H + EXT; i++) {
@@ -257,7 +272,11 @@ export class BattleScene extends Phaser.Scene {
       for (let y = RIVER_Y0; y <= RIVER_Y1; y += 0.6) { const a = this.proj(bx - hw + 0.25, y), b = this.proj(bx + hw - 0.25, y); br.lineBetween(a.x, a.y, b.x, b.y); }
       for (const off of [-hw, hw]) { br.lineStyle(3, 0x5fd3ff, 0.8); const a = this.proj(bx + off, RIVER_Y0 - 0.35), b = this.proj(bx + off, RIVER_Y1 + 0.35); br.lineBetween(a.x, a.y, b.x, b.y); }
     }
-    // 가장자리 어둡게 (집중 + 위계)
+    this.addVignette();
+  }
+
+  /** 가장자리 어둡게 (집중 + 위계) */
+  private addVignette() {
     if (this.textures.exists('vignette')) this.textures.remove('vignette');
     const ct = this.textures.createCanvas('vignette', 256, 512)!;
     const cx = ct.getContext();
@@ -267,8 +286,25 @@ export class BattleScene extends Phaser.Scene {
     this.add.image(this.W / 2, this.H / 2, 'vignette').setDisplaySize(this.W, this.H).setName('bg').setDepth(99999);
   }
 
+  /** 조립 런 자동 전투의 바닥: 양 진영 띠 + 가운데 전선, 벽 없이 화면 가득 */
+  private drawSkirmFloor(g: Phaser.GameObjects.Graphics) {
+    for (let i = -12; i < 28; i++) {
+      const mine = i + 0.5 < 7.5, c = mine ? (i % 2 ? 0x10243a : 0x0d1e33) : (i % 2 ? 0x2a1a1c : 0x241619);
+      g.fillStyle(c, 0.95); g.fillPoints(this.pt([-6, i], [ARENA_W + 6, i], [ARENA_W + 6, i + 1], [-6, i + 1]), true);
+    }
+    g.lineStyle(1, 0x7fb2e0, 0.12);
+    for (let x = -6; x <= ARENA_W + 6; x += 2) { const a = this.proj(x, -12), b2 = this.proj(x, 28); g.lineBetween(a.x, a.y, b2.x, b2.y); }
+    for (let y = -12; y <= 28; y += 2) { const a = this.proj(-6, y), b2 = this.proj(ARENA_W + 6, y); g.lineBetween(a.x, a.y, b2.x, b2.y); }
+    // 전선(가운데): 빛 띠
+    const l1 = this.proj(-6, 7.5), l2 = this.proj(ARENA_W + 6, 7.5);
+    g.lineStyle(10, 0x5fd3ff, 0.07); g.lineBetween(l1.x, l1.y, l2.x, l2.y); g.lineStyle(2, 0xffd067, 0.5); g.lineBetween(l1.x, l1.y, l2.x, l2.y);
+    // 배치 칸 표시(옅게): 앞줄·뒷줄
+    for (const [y, col] of [[3.6, 0x5fd3ff], [6.4, 0x5fd3ff], [8.6, 0xff7a45], [11.4, 0xff7a45]] as [number, number][]) { const a = this.proj(4.5, y), b2 = this.proj(13.5, y); g.lineStyle(1.5, col, 0.16); g.lineBetween(a.x, a.y, b2.x, b2.y); }
+  }
+
   /** 강: 물결이 흘러가는 모습 (매 프레임) */
   private drawWater(now: number) {
+    if (this.skirm) { this.waterG.clear(); this.bridgeG.clear(); return; }
     const g = this.waterG; g.clear();
     g.fillStyle(0x0a2d44, 1); g.fillPoints(this.pt([-0.2, RIVER_Y0], [ARENA_W + 0.2, RIVER_Y0], [ARENA_W + 0.2, RIVER_Y1], [-0.2, RIVER_Y1]), true);
     g.fillStyle(0x0f4766, 0.7); g.fillPoints(this.pt([-0.2, RIVER_Y0 + 0.5], [ARENA_W + 0.2, RIVER_Y0 + 0.5], [ARENA_W + 0.2, RIVER_Y1 - 0.5], [-0.2, RIVER_Y1 - 0.5]), true);
@@ -298,6 +334,7 @@ export class BattleScene extends Phaser.Scene {
     }
   }
   private syncTowers(b: Battle, dt: number) {
+    if (this.skirm) { for (const row of this.towerImgs) for (const im of row) im.setVisible(false); return; }
     const gg = this.plateG;
     for (const team of [0, 1] as const) for (let l = 0; l <= SIDES; l++) {
       const im = this.towerImgs[team][l]; if (!im) continue;
@@ -352,7 +389,7 @@ export class BattleScene extends Phaser.Scene {
     return '유닛이 너무 많아요.';
   }
   private onDrag(ph: DragPhase, card: number, cx: number, cy: number) {
-    if (this.ended) return;
+    if (this.ended || this.skirm) return;
     const b = this.cfg.battle, hud = this.cfg.hud, { x, y } = this.toWorld(cx, cy);
     if (ph === 'start') {
       this.clearSel(); this.selected = card;
@@ -410,7 +447,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private onTap(sx: number, sy: number) {
-    if (this.ended) return;
+    if (this.ended || this.skirm) return;
     const b = this.cfg.battle, hud = this.cfg.hud, at = this.unproj(sx, sy);
     this.hover = at;
     if (this.selSkill !== null) {
@@ -431,7 +468,9 @@ export class BattleScene extends Phaser.Scene {
     const b = this.cfg.battle;
     const stepMs = 1000 / TICK_HZ;
     if (!this.ended) {
-      this.acc += Math.min(100, delta);
+      const sp = this.cfg.speed ? this.cfg.speed() : 1;
+      if (this.cfg.skip?.() && !b.over) { let n = 0; while (!b.over && n++ < 4000) b.step(); this.acc = 0; }   // 건너뛰기: 끝까지 한 번에
+      this.acc += Math.min(100, delta) * sp;
       while (this.acc >= stepMs && !b.over && !b.offer) { b.step(); this.consume(b.events); this.acc -= stepMs; if (b.offer) this.openOffer(); }
       if (b.offer) { this.acc = 0; if (!this.cfg.hud.offering) this.openOffer(); }
       if (b.over) {
@@ -898,9 +937,9 @@ export class BattleScene extends Phaser.Scene {
     const gg = this.groundG; gg.clear();
     const pg = this.plateG; pg.clear();
     const g = this.fxG; g.clear();
-    this.drawPlacement(b, lg, now);
+    if (!this.skirm) this.drawPlacement(b, lg, now);
     // 기지
-    for (const team of [1, 0] as const) {
+    for (const team of this.skirm ? [] as (0 | 1)[] : [1, 0] as const) {
       this.baseFlash[team] = Math.max(0, this.baseFlash[team] - dt * 4);
       this.plate(pg, team, Math.max(0, b.baseHp[team] / 1000), this.baseFlash[team]);
     }
