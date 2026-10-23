@@ -9,7 +9,7 @@ import type { Build } from '../domain/assemble';
  */
 export interface Anchor { scale?: number; foot?: [number, number]; hip?: [number, number]; bottom?: [number, number]; mount?: [number, number]; grip?: [number, number] }
 export interface Placed { id: string; /** 텍스처 키 (뒷모습은 'b_' 접두) */ tex: string; x: number; y: number; w: number; h: number }
-export interface UnitLayout { parts: Placed[]; minX: number; minY: number; maxX: number; maxY: number; w: number; h: number }
+export interface UnitLayout { parts: Placed[]; /** 무기를 다는 점(몸통 어깨/팔 자리) — 무기를 이 점을 축으로 돌린다 */ mount: { x: number; y: number }; /** 엉덩이 점(다리 위) — 몸통을 이 점을 축으로 기울인다 */ hip: { x: number; y: number }; minX: number; minY: number; maxX: number; maxY: number; w: number; h: number }
 
 const A = anchors as unknown as Record<string, Anchor>;
 const AB = anchorsBack as unknown as Record<string, Anchor>;
@@ -70,5 +70,5 @@ export function layoutUnit(b: Pick<Build, 'legs' | 'body' | 'weapon'>, scale = 1
   ];
   const minX = Math.min(...parts.map(p => p.x)), minY = Math.min(...parts.map(p => p.y));
   const maxX = Math.max(...parts.map(p => p.x + p.w)), maxY = Math.max(...parts.map(p => p.y + p.h));
-  return { parts, minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+  return { parts, mount, hip, minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
 }

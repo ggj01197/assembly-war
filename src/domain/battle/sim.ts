@@ -323,7 +323,7 @@ export class Battle {
   nextCard(team: Team): number | null { return this.queue[team][0] ?? null; }
 
   // ───────── 목표 정하기 ─────────
-  private posOfTarget(t: Target): { x: number; y: number; r: number } | null {
+  posOfTarget(t: Target): { x: number; y: number; r: number } | null {
     if (t.kind === 'u') { const e = this.unitById(t.id); return e && e.hp > 0 ? { x: e.x, y: e.y, r: e.r } : null; }
     if (t.kind === 't') { const tw = this.towers[t.team][t.side]; return this.towersOn && tw.hp > 0 ? { x: tw.x, y: tw.y, r: TOWER_R } : null; }
     return this.baseHp[t.team] > 0 ? { ...basePos(t.team), r: BASE_R } : null;

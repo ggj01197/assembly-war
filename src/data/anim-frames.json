@@ -1,0 +1,34 @@
+{
+ "legs_biped_assault": {
+  "m": [
+   69,
+   30,
+   15
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_biped_light": {
+  "m": [
+   69,
+   30,
+   15
+  ],
+  "sides": [
+   "back",
+   "front"
+  ]
+ },
+ "legs_quad_walker": {
+  "m": [
+   86,
+   26,
+   13
+  ],
+  "sides": [
+   "front"
+  ]
+ }
+}
