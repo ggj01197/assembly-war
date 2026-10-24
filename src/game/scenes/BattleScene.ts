@@ -30,7 +30,7 @@ interface View {
   /** 조준 각(라디안)·옆으로 가는 속도·맞은 방향과 세기·무기 계열·무기 휘두름 */
   aim: number; vx: number; hit: number; hitX: number; hitY: number; fam: string; swing: number;
   /** 동작 그림이 있는 다리·무기 이미지 (없으면 null) 와 지금 칸 */
-  legImg: Phaser.GameObjects.Image | null; wpnImg: Phaser.GameObjects.Image | null; legF: number; wpnF: number; flashAt: number;
+  legImg: Phaser.GameObjects.Image | null; legImg2: Phaser.GameObjects.Image | null; legP: number; wpnImg: Phaser.GameObjects.Image | null; legF: number; wpnF: number; flashAt: number;
 }
 type FxKind = 'tracer' | 'blast' | 'puff' | 'ring' | 'flash' | 'spark' | 'dust' | 'debris' | 'proj' | 'beam' | 'img';
 /** key: 스프라이트(투사체·효과), arc: 포물선 높이(px), rot: 회전, img: 만들어진 그림(끝나면 지운다) */
@@ -688,7 +688,7 @@ export class BattleScene extends Phaser.Scene {
       v.c.setPosition(x, y); v.c.setScale(q.s * v.k); v.c.setDepth(y + (u.stats.move === 'air' ? 4000 : 0));
       const mvTarget = u.moving ? 1 : 0;
       v.mv += (mvTarget - v.mv) * Math.min(1, dt * 9);
-      const stride = Math.max(18, v.w * 0.42);
+      const stride = Math.max(14, v.w * 0.30);
       v.ph += (moved / q.s) / stride * Math.PI;
       const vxNow = (x - v.lastX) / Math.max(dt, 0.001) / (this.W * 0.12);       // 옆으로 가는 빠르기(화면 폭 기준)
       v.vx += (clamp(vxNow, -1.5, 1.5) - v.vx) * Math.min(1, dt * 7);
@@ -699,7 +699,7 @@ export class BattleScene extends Phaser.Scene {
       if (tp) { const tq = this.proj(tp.x, tp.y); aimWant = clamp(Math.atan2(tq.x - x, Math.abs(tq.y - y) + 14), -0.55, 0.55); }
       v.aim += (aimWant - v.aim) * Math.min(1, dt * 10);
       // 좌우 방향: 옆으로 가거나 옆을 향하면 몸을 뒤집는다 (앞·뒷모습 그림이라 살짝만)
-      const cf = Math.cos(u.face); const wantFlip = cf > 0.35 ? 1 : cf < -0.35 ? -1 : v.flip;
+      const wantFlip = 1;   // 좌우로 뒤집지 않는다 — 앞·뒷모습 그림이라 뒤집으면 가늘게 찌그러졌다 무기 쪽이 바뀌어 어색했다 (방향은 무기 겨눔으로 표현)
       v.flip += (wantFlip - v.flip) * Math.min(1, dt * 10);
       this.animateView(v, dt, now, amp, calm, false);
       if (u.hp < v.lastHp) v.hpShow = Math.max(v.hpShow, 1.4);
@@ -751,6 +751,7 @@ export class BattleScene extends Phaser.Scene {
       case 'fly':      // 비행: 날갯짓처럼 상하, 기동 때 기체가 크게 기운다
         rigY = Math.sin(now * 3 + id) * h * 0.035 * amp + Math.sin(now * 6.5 + id) * h * 0.008 * amp; rigRot = Math.sin(now * 1.9 + id) * 0.035 * amp + v.vx * 0.12 * amp; break;
     }
+    if (v.legImg && !calm) { legRot = 0; legX = 0; rigY *= 0.6; upX = 0; }   // 걸음은 그림 칸이 맡는다 — 같은 움직임을 컨테이너가 또 흔들면 떨려 보였다
     // 서 있는 동안의 숨 쉬기·주위를 살핌
     const idle = 1 - mv;
     upY += Math.sin(now * 2 + id) * 0.6 * idle * amp;
@@ -761,7 +762,7 @@ export class BattleScene extends Phaser.Scene {
     // 무기: 목표 쪽으로 겨누고 → 쏠 때 반동 → 계열별 연출
     v.recoil = Math.max(0, v.recoil - dt * 6); v.lunge = Math.max(0, v.lunge - dt * 5); v.swing = Math.max(0, v.swing - dt * 4.5); v.atkT += dt;
     const kick = (v.recoilK ?? 0.5) * (calm ? 0 : 1);
-    const aimRot = v.aim * f * 0.8 * amp;
+    const aimRot = v.aim * f * 0.45 * amp;   // 무기가 몸에서 떨어져 보이지 않게 겨눔 각도는 작게 (최대 약 14°)
     wRot += aimRot;
     // 반동: 무기가 뒤로 밀렸다가 돌아온다 / 몸도 살짝 밀린다
     const rc = v.recoil * v.recoil;
@@ -784,7 +785,7 @@ export class BattleScene extends Phaser.Scene {
     if (!calm && v.swing > 0) {
       const p = 1 - v.swing;                       // 0 → 1
       const arc = p < 0.25 ? -(p / 0.25) : (p - 0.25) / 0.75 * 2 - 1;   // 젖힘(−1) → 휘두름(+1)
-      wRot += f * (p < 0.25 ? arc * 0.7 : arc * 1.1);
+      wRot += f * (p < 0.25 ? arc * 0.45 : arc * 0.75);
       lungePx = p > 0.25 ? Math.sin((p - 0.25) / 0.75 * Math.PI) * h * 0.13 * -f : 0;
       upRot += f * (p < 0.25 ? 0.05 : -0.08 * Math.sin((p - 0.25) / 0.75 * Math.PI));
     }
@@ -801,15 +802,16 @@ export class BattleScene extends Phaser.Scene {
     v.upper.setPosition(v.hip.x + upX * 0.5, v.hip.y + upY - recoilPx * 0.4); v.upper.rotation = upRot;
     v.weaponC.rotation = wRot; v.weaponC.y = (v.weaponC.getData('y0') as number) + wY; v.weaponC.x = (v.weaponC.getData('x0') as number) - wY * Math.sin(aimRot) * f;
     v.shadow.setScale(1 - (1 - e) * 0.4, 1 - (1 - e) * 0.4).setAlpha(0.35 * e);
-    // 동작 그림 칸 고르기
-    if (v.legImg && !calm) {
-      let f: number;
-      if (v.kind === 'hover' || v.kind === 'fly') f = Math.floor(now * 8 + id) % 4;   // 추진기 맥동·날갯짓: 시간으로 돈다
-      else {
-        f = Math.floor((((v.ph / (2 * Math.PI)) % 1) + 1) % 1 * 4);                    // 걸음·궤도·바퀴: 간 거리로 돈다
-        if (mv < 0.15 && f % 2 === 1) f = (f + 1) % 4;                                  // 멈추면 디딘 자세로
-      }
-      if (f !== v.legF) { v.legF = f; v.legImg.setFrame('f' + f); }
+    // 동작 그림 칸 고르기: 4칸을 연속 위상으로 돌리고, 지금 칸 위에 다음 칸을 위상만큼 투명하게 겹쳐 부드럽게 잇는다
+    if (v.legImg && v.legImg2 && !calm) {
+      const tp = v.kind === 'hover' || v.kind === 'fly' ? (now * 6 + id) % 4 : ((((v.ph / (2 * Math.PI)) % 1) + 1) % 1) * 4;   // 걸음·궤도·바퀴는 간 거리로, 추진기·날개는 시간으로
+      if (mv < 0.15 && v.kind !== 'hover' && v.kind !== 'fly') {   // 멈추면 가장 가까운 디딘 자세(짝수 칸)로 부드럽게
+        const tgt = Math.round(v.legP / 2) * 2, d = ((tgt - v.legP + 6) % 4) - 2;
+        v.legP = ((v.legP + d * Math.min(1, dt * 8)) % 4 + 4) % 4;
+      } else v.legP = tp;
+      const i0 = Math.floor(v.legP) % 4, i1 = (i0 + 1) % 4, a = v.legP - Math.floor(v.legP);
+      if (i0 !== v.legF) { v.legF = i0; v.legImg.setFrame('f' + i0); }
+      v.legImg2.setFrame('f' + i1).setAlpha(a);
     }
     if (v.wpnImg && !calm) {
       const cdTicks = v.unit.cd, f = v.atkT < 0.07 ? 2 : v.atkT < 0.17 ? 3 : cdTicks > 0 && cdTicks <= 3 && v.unit.tgt ? 1 : 0;
@@ -849,7 +851,9 @@ export class BattleScene extends Phaser.Scene {
       imgs.push(im); return im;
     };
     const legAnim = mkAnim(0), wpnAnim = mkAnim(2, L.mount.x, L.mount.y);
-    const legsC = this.add.container(0, 0, [legAnim ?? mk(0)]);
+    const legAnim2 = legAnim ? mkAnim(0) : null;     // 다음 칸을 겹쳐 서서히 섞는다 (4칸만으로도 끊기지 않게)
+    legAnim2?.setAlpha(0);
+    const legsC = this.add.container(0, 0, legAnim ? [legAnim, legAnim2!] : [mk(0)]);
     const bodyImg = mk(1, L.hip.x, L.hip.y), wImg = wpnAnim ?? mk(2, L.mount.x, L.mount.y);
     const weaponC = this.add.container(L.mount.x - L.hip.x, L.mount.y - L.hip.y, [wImg]).setData('x0', L.mount.x - L.hip.x).setData('y0', L.mount.y - L.hip.y);
     const upper = this.add.container(L.hip.x, L.hip.y, [bodyImg, weaponC]);
@@ -862,7 +866,7 @@ export class BattleScene extends Phaser.Scene {
       c, rig, legsC, upper, weaponC, hip: L.hip, shadow, imgs, unit: u, w: L.w, h: L.h, lift, kind: moveKind(build.legs, air), face, flip: 1,
       ph: Math.random() * 6, mv: 0, born: this.time.now / 1000, landed: false, recoil: 0, lunge: 0, flash: 0, hpShow: 0, shake: 0,
       lastX: 0, lastY: 0, foot: 0, dying: -1, tinted: false, lastHp: u.hp, k: hd ? hd.scale : 1, hero: !!hd, atkT: 9, atkW: 0,
-      aim: 0, vx: 0, hit: 0, hitX: 0, hitY: 0, fam: '', swing: 0, legImg: legAnim, wpnImg: wpnAnim, legF: 0, wpnF: 0, flashAt: -9,
+      aim: 0, vx: 0, hit: 0, hitX: 0, hitY: 0, fam: '', swing: 0, legImg: legAnim, legImg2: legAnim2, legP: 0, wpnImg: wpnAnim, legF: 0, wpnF: 0, flashAt: -9,
     } as View;
   }
 

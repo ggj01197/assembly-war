@@ -176,5 +176,5 @@ export async function startApp(game: Phaser.Game): Promise<void> {
   show('hangar');
   void initAds();   // 광고 SDK 시작 + iOS 추적 허용 창(ATT): 격납고가 뜬 뒤 한 번
   // 점검·스크린샷 도구가 화면을 직접 부를 수 있게 한다
-  (window as unknown as { __aw: unknown }).__aw = { nav, show, store, startBattle };
+  (window as unknown as { __aw: unknown }).__aw = { nav, show, store, startBattle, game };
 }
