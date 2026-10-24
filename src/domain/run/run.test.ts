@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { PARTS } from '../../data/parts';
 import { assemble } from '../assemble';
 import { Battle } from '../battle/sim';
-import { newRun, buy, reroll, sell, equip, unequip, mergeBench, autoBuild, readyMechs, mechStatus, mechMult, battlePlan, enemyFor, settle, nextRound, RUN_ROUNDS, RUN_HEARTS, START_COINS, SHOP_SIZE, BENCH_MAX, kindOf, type RunState } from './run';
+import { newRun, buy, reroll, sell, equip, unequip, mergeBench, autoBuild, readyMechs, mechStatus, mechMult, battlePlan, enemyFor, settle, nextRound, chooseRelic, RUN_ROUNDS, RUN_HEARTS, START_COINS, SHOP_SIZE, BENCH_MAX, kindOf, type RunState } from './run';
 
 const sim = (rs: RunState) => {
   const plan = battlePlan(rs)!;
-  const b = new Battle(plan.mineDeck, plan.foeDeck, PARTS, rs.seed + rs.round, { skirmish: { mine: plan.mine, foe: plan.foe } });
+  const b = new Battle(plan.mineDeck, plan.foeDeck, PARTS, rs.seed + rs.round, { skirmish: { mine: plan.mine, foe: plan.foe, mods: plan.mods, limitSec: plan.limitSec } });
   let n = 0; while (b.step() && n++ < 3000) { /* 끝까지 */ }
   return b.result().winner === 0;
 };
@@ -81,7 +81,7 @@ describe('조립 런: 추천 조립', () => {
 
 describe('조립 런: 전투·정산', () => {
   it('적은 라운드가 갈수록 늘거나 세지고 전부 조립 가능하다', () => {
-    let prevN = 0, prevM = 0; for (let r = 1; r <= RUN_ROUNDS; r++) { const e = enemyFor(r, 5); expect(e.builds.length).toBeGreaterThanOrEqual(prevN); expect(e.mult).toBeGreaterThan(prevM); prevN = e.builds.length; prevM = e.mult; for (const b of e.builds) expect(assemble(b, PARTS).ok).toBe(true); }
+    let prevN = 0, prevM = 0; for (let r = 1; r <= RUN_ROUNDS; r++) { const e = enemyFor(r, 5); const total = e.builds.length + (e.boss ? 1 : 0); expect(total).toBeGreaterThanOrEqual(prevN); expect(e.mult).toBeGreaterThan(prevM); prevN = total; prevM = e.mult; for (const b of e.builds) expect(assemble(b, PARTS).ok).toBe(true); }
   });
   it('전투 계획의 자리는 아레나 안이고, 전투가 끝까지 돈다', () => {
     const rs = newRun(1), plan = battlePlan(rs)!;
@@ -103,16 +103,45 @@ describe('조립 런: 전투·정산', () => {
     let wins = 0, total = 0;
     for (let seed = 1; seed <= 20; seed++) {
       const rs = newRun(seed);
-      for (let guard = 0; guard < 10 && (rs.phase === 'build' || rs.phase === 'won' || rs.phase === 'lost'); guard++) {
+      for (let guard = 0; guard < 24 && (rs.phase === 'build' || rs.phase === 'won' || rs.phase === 'lost'); guard++) {
         if (rs.phase !== 'build') { nextRound(rs); continue; }
         for (let i = 0; i < SHOP_SIZE; i++) if (rs.shop[i] && rs.coins >= rs.shop[i]!.cost && rs.bench.length < BENCH_MAX) buy(rs, i);
         autoBuild(rs);
         if (!readyMechs(rs).length) break;
-        const w = sim(rs); total++; if (w) wins++; settle(rs, w);
+        const w = sim(rs); total++; if (w) wins++; settle(rs, w); if (rs.relicOffer) chooseRelic(rs, rs.relicOffer[0]);
       }
       expect(['cleared', 'over']).toContain(rs.phase);
     }
     expect(total).toBeGreaterThan(20);
     expect(wins / total).toBeGreaterThan(0.25); expect(wins / total).toBeLessThan(0.98);   // 너무 쉽지도 불가능하지도 않다(대략)
   }, 60000);
+});
+
+describe('조립 런 M2: 보스·유물', () => {
+  it('3·6라운드는 보스가 나오고 보스는 보스 id 로 전투 계획에 들어간다', () => {
+    const rs = newRun(1); rs.round = 3;
+    const plan = battlePlan(rs)!; expect(plan.bossName).not.toBeNull(); expect(plan.foe.some(u => u.boss)).toBe(true); expect(plan.limitSec).toBeGreaterThan(45);
+    rs.round = 2; const p2 = battlePlan(rs)!; expect(p2.bossName).toBeNull(); expect(p2.foe.every(u => !u.boss)).toBe(true);
+  });
+  it('2·4라운드를 이기면 유물 3장이 나오고, 고르기 전에는 다음 라운드로 못 간다', () => {
+    const rs = newRun(1); rs.round = 2; settle(rs, true);
+    expect(rs.relicOffer).toHaveLength(3); expect(new Set(rs.relicOffer).size).toBe(3);
+    expect(nextRound(rs)).toBe(false);
+    const id = rs.relicOffer![0]; expect(chooseRelic(rs, id)).toBe(true); expect(rs.relics).toEqual([id]); expect(rs.relicOffer).toBeNull(); expect(nextRound(rs)).toBe(true);
+    expect(chooseRelic(rs, 'md_dmg')).toBe(false);   // 제안이 없으면 못 고른다
+  });
+  it('이미 가진 유물은 다시 나오지 않고, 경제 유물은 코인을 준다', () => {
+    const rs = newRun(2); rs.round = 2; settle(rs, true); const first = rs.relicOffer![0]; chooseRelic(rs, first); nextRound(rs);
+    rs.round = 4; settle(rs, true); expect(rs.relicOffer).not.toContain(first);
+    const r2 = newRun(3); r2.relicOffer = ['rl_bank', 'rl_income', 'md_dmg']; const c = r2.coins; chooseRelic(r2, 'rl_bank'); expect(r2.coins).toBe(c + 6);
+    r2.relicOffer = ['rl_income']; chooseRelic(r2, 'rl_income'); expect(r2.bonusIncome).toBe(2); const c2 = r2.coins; settle(r2, true); expect(r2.coins).toBeGreaterThanOrEqual(c2 + 6 + 1 + 2);
+  });
+  it('전투 유물은 계획의 mods 로 전해지고 경제 유물은 빠진다', () => {
+    const rs = newRun(1); rs.relics = ['md_dmg', 'rl_income', 'md_hp'];
+    expect(battlePlan(rs)!.mods).toEqual(['md_dmg', 'md_hp']);
+  });
+  it('유물(강화탄)이 있으면 같은 전투에서 더 큰 피해를 준다', () => {
+    const dmg = (mods: string[]) => { const rs = newRun(1); rs.relics = mods; const p = battlePlan(rs)!; const b = new Battle(p.mineDeck, p.foeDeck, PARTS, 9, { skirmish: { mine: p.mine, foe: p.foe, mods: p.mods, limitSec: 6 } }); for (let i = 0; i < 6 * 20 && !b.over; i++) b.step(); return b.result().damageByCard[0].reduce((a, v) => a + v, 0); };
+    expect(dmg(['md_dmg', 'md_rate'])).toBeGreaterThan(dmg([]));
+  });
 });

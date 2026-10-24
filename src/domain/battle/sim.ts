@@ -138,10 +138,10 @@ export interface BattleOptions {
    * 조립 런(2026-10-23, REDESIGN_PLAN_v0 안 1)의 한 라운드: 카드(= 메카) 한 장당 유닛 한 기를 정해진 자리에 놓고 시작해 **자동으로** 끝까지 싸운다.
    * 와트·손패·봇·포탑·기지가 없고, 모든 유닛이 가장 가까운 적을 곧장 노린다. 한쪽이 전멸하거나 시간이 다 되면 끝(시간이 다 되면 남은 체력 비율이 높은 쪽).
    */
-  skirmish?: { mine: SkirmishUnit[]; foe: SkirmishUnit[]; limitSec?: number };
+  skirmish?: { mine: SkirmishUnit[]; foe: SkirmishUnit[]; limitSec?: number; /** 내 팀에 적용할 유물(지휘 모듈 id) */ mods?: string[] };
 }
 /** 조립 런 전투에서 유닛을 놓는 자리: card = 그 팀 덱의 카드 번호 */
-export interface SkirmishUnit { card: number; x: number; y: number; /** 체력·공격 배율 (런의 ★ 합성 보너스, 기본 1) */ mult?: number }
+export interface SkirmishUnit { card: number; x: number; y: number; /** 체력·공격 배율 (런의 ★ 합성 보너스, 기본 1) */ mult?: number; /** 보스 id (있으면 카드 대신 보스 능력치·크기로 나온다) */ boss?: string }
 export const SKIRMISH_LIMIT_SEC = 45;
 
 export const HAND_SIZE = 4;
@@ -275,11 +275,19 @@ export class Battle {
     if (this.survival) { this.matchSec = SURVIVAL_SECONDS; this.maxTicks = SURVIVAL_SECONDS * TICK_HZ; }
     if (opts.skirmish) {
       const lim = opts.skirmish.limitSec ?? SKIRMISH_LIMIT_SEC; this.matchSec = lim; this.maxTicks = lim * TICK_HZ; this.bots = [false, false];
+      for (const id of opts.skirmish.mods ?? []) { const d = moduleById(id); if (d) addMods(this.mod[0], d); }
       for (const [t, list] of [[0, opts.skirmish.mine], [1, opts.skirmish.foe]] as [Team, SkirmishUnit[]][]) for (const k of list) {
-        const card = this.decks[t][k.card]; if (!card) continue;
-        const m = k.mult ?? 1, st = m === 1 ? card.stats : { ...card.stats, hp: Math.round(card.stats.hp * m), dmg: Math.round(card.stats.dmg * m * 100) / 100 };
-        const u = this.makeUnit(t, k.x, k.y, st, k.card, null);
-        this.units.push(u); this.spawned[t]++; this.spawnsByCard[t][k.card]++;
+        const m = k.mult ?? 1, hpm = t === 0 ? 1 + this.mod[0].hp : 1;
+        let u: Unit;
+        if (k.boss) {
+          const bd = bossById(k.boss); if (!bd) continue;
+          u = this.makeUnit(t, k.x, k.y, { ...bd.stats, hp: Math.round(bd.stats.hp * m), dmg: Math.round(bd.stats.dmg * m * 100) / 100 }, -1, bd.id, 1.5);
+        } else {
+          const card = this.decks[t][k.card]; if (!card) continue;
+          u = this.makeUnit(t, k.x, k.y, { ...card.stats, hp: Math.round(card.stats.hp * m * hpm), dmg: Math.round(card.stats.dmg * m * 100) / 100 }, k.card, null);
+          this.spawnsByCard[t][k.card]++;
+        }
+        this.units.push(u); this.spawned[t]++;
         this.pre.push({ type: 'spawn', unit: u.id, team: t, x: k.x, y: k.y });
       }
     }

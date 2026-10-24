@@ -1,0 +1,16 @@
+import { chromium } from 'playwright-core';
+import { fileURLToPath } from 'node:url';
+const OUT = fileURLToPath(new URL('../../00_PROJECT_CONTROL/shots/', import.meta.url));
+const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await ctx.newPage();
+const errors = []; page.on('pageerror', e => errors.push(e.message));
+await page.goto('http://localhost:5190/', { waitUntil: 'networkidle' });
+await page.waitForSelector('.screen.hangar:not([hidden])');
+await page.locator('#hgRun').click(); await page.waitForSelector('.screen.run:not([hidden])');
+await page.evaluate(() => { const r = window.__awRun; r.rs.round = 3; r.rs.relics = ['md_dmg', 'rl_income']; r.render(); });
+await page.waitForTimeout(500); await page.screenshot({ path: `${OUT}/390x844_m2_boss_preview.png` });
+await page.evaluate(() => { const r = window.__awRun; r.rs.round = 2; r.rs.phase = 'won'; r.rs.relicOffer = ['md_range', 'md_hp', 'rl_bank']; r.render(); });
+await page.waitForTimeout(500); await page.screenshot({ path: `${OUT}/390x844_m2_relic.png` });
+console.log('errors', errors);
+await browser.close();

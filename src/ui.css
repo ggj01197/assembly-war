@@ -541,3 +541,13 @@ i.brief { display: block; font-style: normal; color: #9fd9ff; font-weight: 700; 
 .rm { min-width: 0; } .rm-chips { flex-wrap: nowrap; max-width: 100%; } .rm-chip { flex: 1 1 0; min-width: 0; width: auto; max-width: 42px; }
 .rn-go { font: 700 18px var(--body); min-height: 56px; } .rn-go small { font: 700 12px var(--body); opacity: .8; }
 .rn-top .rn-info { flex: none; }
+
+/* 조립 런 M2: 적 미리보기·보스·유물 */
+.rn-enemy .rn-h b em.boss { font: 700 10px var(--body); font-style: normal; color: #ffb08a; border: 1px solid #ff7a45; border-radius: 8px; padding: 0 6px; margin-left: 4px; }
+.rn-foes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-height: 48px; }
+.rf { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 10px; background: rgba(60,26,22,.55); border: 1px solid rgba(255,122,69,.4); } .rf.boss { font-size: 28px; border-color: #ffd067; background: rgba(90,60,10,.6); }
+.rn-relicrow { display: flex; gap: 4px; font-size: 18px; } .rn-relicrow i { font-style: normal; }
+.rn-result.relic { top: 22%; } .rn-relics { display: grid; gap: 8px; }
+.rn-relic { display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto; column-gap: 10px; text-align: left; padding: 8px 12px; border-radius: 12px; background: rgba(23,39,64,.95); border: 1px solid var(--cyan); }
+.rn-relic i { grid-row: 1 / 3; font-style: normal; font-size: 28px; align-self: center; } .rn-relic b { font: 700 14px var(--body); } .rn-relic small { font: 400 12px var(--body); color: var(--steel); }
+.rf.boss { position: relative; width: 60px; } .rf.boss u { position: absolute; right: -2px; top: -8px; font-size: 16px; text-decoration: none; }

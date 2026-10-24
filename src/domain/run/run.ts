@@ -3,6 +3,8 @@ import { assemble, type Build } from '../assemble';
 import { mulberry32 } from '../rng';
 import { rarityOf, type Rarity } from '../supply';
 import { BLUEPRINTS } from '../blueprints';
+import { moduleById } from '../modules';
+import { bossById } from '../../data/bosses';
 import type { SkirmishUnit, Deck } from '../battle/sim';
 
 /**
@@ -10,7 +12,7 @@ import type { SkirmishUnit, Deck } from '../battle/sim';
  * 라운드마다 ① 상점에서 부품을 사고 ② 작업대에서 메카를 조립하고 ③ 자동 전투를 구경한다. 지면 하트가 줄고, 하트가 0 이면 런이 끝난다.
  * 이 파일은 규칙만 다룬다(화면·저장 없음). 같은 시드·같은 행동이면 같은 결과.
  */
-export const RUN_ROUNDS = 3;            // M1: 3라운드 (기획안 최종은 10)
+export const RUN_ROUNDS = 6;            // M2: 6라운드 (기획안 최종은 10)
 export const RUN_HEARTS = 3;
 export const START_COINS = 10;
 export const SHOP_SIZE = 5;
@@ -30,9 +32,29 @@ export interface PartInst { uid: number; id: string; star: number }
 export interface Mech { legs: PartInst | null; body: PartInst | null; weapon: PartInst | null; accessory: PartInst | null }
 export interface ShopOffer { id: string; cost: number }
 export type Phase = 'build' | 'won' | 'lost' | 'cleared' | 'over';
+
+/** 보스 라운드: 라운드 번호 → 보스 id (보스 능력치·크기는 data/bosses) */
+export const BOSS_ROUNDS: Record<number, string> = { 3: 'boss_mother', 6: 'boss_general' };
+/** 이 라운드를 이기면 유물 3택 1 */
+export const RELIC_ROUNDS = [2, 4];
+
+/** 유물: 런이 끝날 때까지 이어지는 강화. 전투 유물은 지휘 모듈(modules.ts)을 그대로 쓰고, 경제 유물은 코인을 준다. */
+export interface RelicInfo { id: string; name: string; desc: string; icon: string; combat: boolean }
+export const COMBAT_RELICS = ['md_dmg', 'md_rate', 'md_range', 'md_pierce', 'md_hp', 'md_armor', 'md_regen', 'md_speed'];
+const ECON_RELICS: RelicInfo[] = [
+  { id: 'rl_income', name: '배당금', desc: '라운드가 끝날 때마다 코인 +2', icon: '🪙', combat: false },
+  { id: 'rl_bank', name: '보급 계약', desc: '지금 코인 +6', icon: '📦', combat: false },
+];
+export function relicInfo(id: string): RelicInfo {
+  const e = ECON_RELICS.find(r => r.id === id); if (e) return e;
+  const m = moduleById(id); return { id, name: m?.name ?? id, desc: m?.desc ?? '', icon: m?.icon ?? '✨', combat: true };
+}
+const ALL_RELICS = [...COMBAT_RELICS, ...ECON_RELICS.map(r => r.id)];
 export interface RunState {
   seed: number; round: number; hearts: number; coins: number; rerolls: number; nextUid: number; phase: Phase;
   shop: (ShopOffer | null)[]; bench: PartInst[]; mechs: Mech[];
+  /** 가진 유물 · 지금 고를 수 있는 유물 3장(없으면 null) · 라운드 끝 추가 코인 */
+  relics: string[]; relicOffer: string[] | null; bonusIncome: number;
 }
 
 const partOf = (id: string): Part | undefined => PARTS.find(p => p.id === id);
@@ -46,7 +68,7 @@ function fromBuild(rs: RunState, b: Build): Mech {
 
 /** 새 런: 메카 두 대(정찰병·중장 전차)를 가지고 시작한다 */
 export function newRun(seed: number): RunState {
-  const rs: RunState = { seed, round: 1, hearts: RUN_HEARTS, coins: START_COINS, rerolls: 0, nextUid: 1, phase: 'build', shop: [], bench: [], mechs: [emptyMech(), emptyMech(), emptyMech(), emptyMech()] };
+  const rs: RunState = { seed, round: 1, hearts: RUN_HEARTS, coins: START_COINS, rerolls: 0, nextUid: 1, phase: 'build', shop: [], bench: [], relics: [], relicOffer: null, bonusIncome: 0, mechs: [emptyMech(), emptyMech(), emptyMech(), emptyMech()] };
   const get = (id: string) => BLUEPRINTS.find(b => b.id === id)!.build;
   rs.mechs[0] = fromBuild(rs, get('bp_scout')); rs.mechs[1] = fromBuild(rs, get('bp_tank'));
   rollShop(rs);
@@ -183,14 +205,16 @@ export function autoBuild(rs: RunState): void {
 
 // ───────── 적과 전투 준비 ─────────
 /** 라운드별 적: 추천 카드 중에서 시드로 뽑는다 (개수·★ 배율은 라운드가 올라갈수록 늘어난다) */
-export const ENEMY_COUNT = [2, 3, 3];           // 라운드별 적 수 (M1)
-export const ENEMY_MULT = [0.45, 0.62, 0.8];   // 라운드별 적 체력·공격 배율
-export function enemyFor(round: number, seed: number): { builds: Build[]; mult: number } {
+export const ENEMY_COUNT = [2, 3, 3, 4, 4, 4];           // 라운드별 적 수 (보스 라운드는 보스 포함)
+export const ENEMY_MULT = [0.45, 0.6, 0.72, 0.8, 0.88, 0.96];   // 라운드별 적 체력·공격 배율
+export const BOSS_MULT = 0.3;                                   // 보스는 능력치가 매우 커서 줄여 쓴다
+export function enemyFor(round: number, seed: number): { builds: Build[]; mult: number; boss: string | null; bossMult: number } {
   const rng = mulberry32((seed * 131 + round * 7907) >>> 0);
-  const n = ENEMY_COUNT[Math.min(round, ENEMY_COUNT.length) - 1], pool = [...BLUEPRINTS];
+  const i = Math.min(round, ENEMY_COUNT.length) - 1, boss = BOSS_ROUNDS[round] ?? null;
+  const n = Math.max(1, ENEMY_COUNT[i] - (boss ? 1 : 0)), pool = [...BLUEPRINTS];
   const builds: Build[] = [];
-  for (let i = 0; i < n && pool.length; i++) { const k = Math.floor(rng() * pool.length); builds.push({ ...pool[k].build }); pool.splice(k, 1); }
-  return { builds, mult: ENEMY_MULT[Math.min(round, ENEMY_MULT.length) - 1] };
+  for (let k = 0; k < n && pool.length; k++) { const j = Math.floor(rng() * pool.length); builds.push({ ...pool[j].build }); pool.splice(j, 1); }
+  return { builds, mult: ENEMY_MULT[i], boss, bossMult: BOSS_MULT * (1 + 0.25 * (round / RUN_ROUNDS)) };
 }
 
 /** 전투 자리: 근접·단단한 쪽은 앞줄, 멀리 쏘는 쪽·치료는 뒷줄. 내 쪽은 y 작은 쪽이 뒤. */
@@ -210,33 +234,54 @@ export interface BattlePlan {
   mineDeck: Deck; foeDeck: Deck;
   mine: SkirmishUnit[]; foe: SkirmishUnit[];
   mineMechIdx: number[];
+  /** 내 팀에 적용할 전투 유물(지휘 모듈 id) · 제한 시간(보스 라운드는 길다) · 보스 이름 */
+  mods: string[]; limitSec: number; bossName: string | null;
 }
 export function battlePlan(rs: RunState): BattlePlan | null {
   const mine = readyMechs(rs);
   if (!mine.length) return null;
   const en = enemyFor(rs.round, rs.seed);
   const mp = place(mine.map(m => m.build), 0), fp = place(en.builds, 1);
+  const foe: SkirmishUnit[] = en.builds.map((_, i) => ({ card: i, x: fp[i].x, y: en.boss ? 11.4 : fp[i].y, mult: en.mult }));
+  const bd = en.boss ? bossById(en.boss) : null;
+  if (bd) foe.push({ card: -1, x: 9, y: 9.4, mult: en.bossMult, boss: bd.id });
   return {
     mineDeck: { cards: mine.map(m => ({ build: m.build })) },
     foeDeck: { cards: en.builds.map(build => ({ build })) },
     mine: mine.map((m, i) => ({ card: i, x: mp[i].x, y: mp[i].y, mult: m.mult })),
-    foe: en.builds.map((_, i) => ({ card: i, x: fp[i].x, y: fp[i].y, mult: en.mult })),
-    mineMechIdx: mine.map(m => m.idx),
+    foe, mineMechIdx: mine.map(m => m.idx),
+    mods: rs.relics.filter(id => relicInfo(id).combat), limitSec: bd ? 70 : 45, bossName: bd?.name ?? null,
   };
+}
+
+/** 유물 3장을 뽑는다 (이미 가진 것은 뺀다, 같은 시드·라운드면 같은 3장) */
+export function offerRelics(rs: RunState): string[] {
+  const rng = mulberry32((rs.seed * 17 + rs.round * 4177) >>> 0);
+  const pool = ALL_RELICS.filter(id => !rs.relics.includes(id)), out: string[] = [];
+  while (out.length < 3 && pool.length) { const k = Math.floor(rng() * pool.length); out.push(pool[k]); pool.splice(k, 1); }
+  return out;
+}
+export function chooseRelic(rs: RunState, id: string): boolean {
+  if (!rs.relicOffer || !rs.relicOffer.includes(id)) return false;
+  rs.relics.push(id); rs.relicOffer = null;
+  if (id === 'rl_income') rs.bonusIncome += 2;
+  if (id === 'rl_bank') rs.coins += 6;
+  return true;
 }
 
 /** 전투가 끝난 뒤 정산: 이기면 코인·다음 라운드(마지막이면 클리어), 지면 하트 −1 (0 이면 런 종료) */
 export function settle(rs: RunState, win: boolean): void {
   if (win) {
-    rs.coins += WIN_INCOME + rs.round;
+    rs.coins += WIN_INCOME + rs.round + rs.bonusIncome;
     rs.phase = rs.round >= RUN_ROUNDS ? 'cleared' : 'won';
+    if (rs.phase === 'won' && RELIC_ROUNDS.includes(rs.round)) rs.relicOffer = offerRelics(rs);
   } else {
-    rs.hearts--; rs.coins += LOSE_INCOME;
+    rs.hearts--; rs.coins += LOSE_INCOME + rs.bonusIncome;
     rs.phase = rs.hearts <= 0 || rs.round >= RUN_ROUNDS ? 'over' : 'lost';   // 마지막 라운드를 지면 런 끝
   }
 }
 /** 다음 라운드로(이겼든 졌든 하트가 남았으면): 상점을 새로 채운다 */
 export function nextRound(rs: RunState): boolean {
-  if (rs.phase !== 'won' && rs.phase !== 'lost') return false;
+  if ((rs.phase !== 'won' && rs.phase !== 'lost') || rs.relicOffer) return false;   // 유물을 먼저 골라야 한다
   rs.round++; rs.rerolls = 0; rs.phase = 'build'; rollShop(rs); return true;
 }

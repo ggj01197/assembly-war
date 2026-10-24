@@ -6,8 +6,9 @@ import { spriteUrl, accIconUrl } from '../game/unitLayout';
 import { play } from '../native/audio';
 import {
   newRun, buy, reroll, sell, sellValue, equip, unequip, autoBuild, readyMechs, mechBuild, mechStatus, mechMult, battlePlan, settle, nextRound,
-  RUN_ROUNDS, RUN_HEARTS, REROLL_COST, BENCH_MAX, SLOT_KINDS, kindOf, type RunState, type SlotKind, type PartInst, type BattlePlan,
+  RUN_ROUNDS, RUN_HEARTS, REROLL_COST, BENCH_MAX, SLOT_KINDS, kindOf, enemyFor, chooseRelic, relicInfo, type RunState, type SlotKind, type PartInst, type BattlePlan,
 } from '../domain/run/run';
+import { bossById } from '../data/bosses';
 import type { Nav, Screen } from './app';
 
 const KIND_LABEL: Record<SlotKind, string> = { legs: '다리', body: '몸통', weapon: '무기', accessory: '장식' };
@@ -30,6 +31,14 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
 
   const say = (m: string) => { msg = m; };
 
+  /** 이번 라운드 적 미리보기(+ 보스 표시)와 가진 유물 */
+  function enemyPreview(): string {
+    const en = enemyFor(rs.round, rs.seed), bd = en.boss ? bossById(en.boss) : null;
+    const relics = rs.relics.length ? `<span class="rn-relicrow" aria-label="가진 유물">${rs.relics.map(id => { const r = relicInfo(id); return `<i title="${esc(r.name)}: ${esc(r.desc)}">${r.icon}</i>`; }).join('')}</span>` : '';
+    return `<section class="rn-sec rn-enemy"><div class="rn-h"><b>이번 적 ${bd ? `<em class="boss">보스: ${esc(bd.name)}</em>` : ''}</b>${relics}</div>
+      <div class="rn-foes">${en.builds.map(b => `<span class="rf">${unitFit(b, 44, 46)}</span>`).join('')}${bd ? `<span class="rf boss" aria-label="보스 ${esc(bd.name)}">${unitFit(bd.build, 48, 50)}<u aria-hidden="true">👑</u></span>` : ''}</div></section>`;
+  }
+
   function mechCard(i: number): string {
     const m = rs.mechs[i], b = mechBuild(m), st = mechStatus(m);
     const stats = b && st.ready ? assemble(b, PARTS).stats : null, mult = mechMult(m), lm = levelMultiplier(1);
@@ -48,11 +57,18 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
     return `<button class="rb-chip ${sel === p.uid ? 'on' : ''}" data-b="${p.uid}" type="button" aria-label="${esc(nameOf(p.id))}"><img src="${imgOf(p.id)}" alt="" draggable="false"><b>${esc(nameOf(p.id))}</b><i>${stars(p.star)}</i></button>`;
   }
 
+  function relicPanel(): string {
+    if (!rs.relicOffer) return '';
+    return `<div class="sheet-dim"></div><div class="rn-result relic" role="dialog" aria-label="유물 선택"><b>🎁 유물을 하나 고르세요</b><p>런이 끝날 때까지 이어지는 강화예요.</p>
+      <div class="rn-relics">${rs.relicOffer.map(id => { const r = relicInfo(id); return `<button class="rn-relic" data-r="${id}" type="button"><i>${r.icon}</i><b>${esc(r.name)}</b><small>${esc(r.desc)}</small></button>`; }).join('')}</div></div>`;
+  }
+
   function resultPanel(): string {
     const p = rs.phase;
     if (p === 'build') return '';
+    if (rs.relicOffer) return relicPanel();
     const title = p === 'cleared' ? '🏆 런 클리어!' : p === 'over' ? '💥 런 종료' : lastWin ? '✅ 승리!' : '❌ 패배';
-    const sub = p === 'cleared' ? `${RUN_ROUNDS}라운드를 모두 이겼어요.` : p === 'over' ? (rs.hearts <= 0 ? '하트를 모두 잃었어요.' : '마지막 라운드에서 졌어요.') : lastWin ? `코인을 받았어요. 다음 라운드를 준비하세요 (코인 ${rs.coins}).` : `하트 −1 (남은 하트 ${rs.hearts}). 코인 ${rs.coins}.`;
+    const sub = p === 'cleared' ? `${RUN_ROUNDS}라운드를 모두 이겼어요. 보스까지 쓰러뜨렸어요!` : p === 'over' ? (rs.hearts <= 0 ? '하트를 모두 잃었어요.' : '마지막 라운드에서 졌어요.') : lastWin ? `코인을 받았어요. 다음 라운드를 준비하세요 (코인 ${rs.coins}).` : `하트 −1 (남은 하트 ${rs.hearts}). 코인 ${rs.coins}.`;
     const btn = p === 'won' || p === 'lost' ? '<button class="btn primary big" id="rnNext" type="button">다음 라운드 ▶</button>' : '<button class="btn primary big" id="rnAgain" type="button">새 런</button><button class="btn" id="rnExit" type="button">격납고로</button>';
     return `<div class="sheet-dim"></div><div class="rn-result" role="dialog"><b>${title}</b><p>${esc(sub)}</p><div class="rn-btns">${btn}</div></div>`;
   }
@@ -68,6 +84,7 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
         <span class="rn-info">${rs.round}/${RUN_ROUNDS}R · ${'❤'.repeat(Math.max(0, rs.hearts))}${'♡'.repeat(Math.max(0, RUN_HEARTS - rs.hearts))} · 🪙${rs.coins}</span>
       </header>
       <div class="rn-body">
+        ${enemyPreview()}
         <section class="rn-sec">
           <div class="rn-h"><b>상점</b><button class="rn-reroll" id="rnReroll" type="button" ${rs.coins < REROLL_COST ? 'disabled' : ''}>🔄 리롤 🪙${REROLL_COST}</button></div>
           <div class="rn-shop">${rs.shop.map((o, i) => o
@@ -110,6 +127,7 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
     (el.querySelector('#rnSell') as HTMLButtonElement | null)?.addEventListener('click', () => { if (sel !== null && sell(rs, sel)) { play('uiClick'); say('부품을 팔았어요.'); sel = null; } render(); });
     (el.querySelector('#rnAuto') as HTMLButtonElement).onclick = () => { autoBuild(rs); sel = null; play('packBurst'); say('가진 부품으로 가장 센 메카를 조립했어요.'); render(); };
     (el.querySelector('#rnGo') as HTMLButtonElement).onclick = () => { const plan = battlePlan(rs); if (!plan) { play('deny'); return; } play('uiClick'); startBattle(plan); };
+    el.querySelectorAll<HTMLButtonElement>('.rn-relic').forEach(b => b.onclick = () => { if (chooseRelic(rs, b.dataset.r!)) { play('ready'); say(`유물「${relicInfo(b.dataset.r!).name}」를 얻었어요!`); } render(); });
     (el.querySelector('#rnNext') as HTMLButtonElement | null)?.addEventListener('click', () => { nextRound(rs); sel = null; say(`${rs.round}라운드! 상점이 새로 채워졌어요.`); play('uiClick'); render(); });
     (el.querySelector('#rnAgain') as HTMLButtonElement | null)?.addEventListener('click', () => { rs = newRun(Date.now() & 0x7fffffff); sel = null; say('새 런을 시작했어요.'); play('uiClick'); render(); });
     (el.querySelector('#rnExit') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiBack'); nav.goHangar(); });
@@ -123,5 +141,6 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
   }
 
   function show() { el.hidden = false; render(); }
+  (window as unknown as { __awRun?: unknown }).__awRun = { get rs() { return rs; }, render };   // 점검 도구용
   return { el, show: () => { show(); }, hide: () => { el.hidden = true; } };
 }

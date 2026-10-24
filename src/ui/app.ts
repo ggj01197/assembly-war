@@ -86,7 +86,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
   /** 조립 런: 같은 전장 장면을 자동 전투 모드(skirmish)로 쓴다 */
   function runBattle(plan: BattlePlan, info: { round: number; rounds: number; hearts: number; seed: number }, done: (r: 'win' | 'lose' | 'quit') => void) {
     const s = store.getState().save;
-    const battle = new Battle(plan.mineDeck, plan.foeDeck, PARTS, info.seed, { skirmish: { mine: plan.mine, foe: plan.foe } });
+    const battle = new Battle(plan.mineDeck, plan.foeDeck, PARTS, info.seed, { skirmish: { mine: plan.mine, foe: plan.foe, mods: plan.mods, limitSec: plan.limitSec } });
     if (current) screens[current].hide();
     current = null;
     runHud.configure(info);
