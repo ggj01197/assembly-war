@@ -76,6 +76,7 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
   function render() {
     const ready = readyMechs(rs).length;
     const selP = sel !== null ? rs.bench.find(p => p.uid === sel) : null;
+    const sc0 = (el.querySelector('.rn-body') as HTMLElement | null)?.scrollTop ?? 0;
     el.innerHTML = `
       <div class="bg"></div>
       <header class="rn-top">
@@ -106,6 +107,7 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
         <button class="btn primary rn-go" id="rnGo" type="button" ${ready ? '' : 'disabled'}>전투 시작 ▶ <small>(${ready}대)</small></button>
       </footer>
       ${resultPanel()}`;
+    const sc1 = el.querySelector('.rn-body') as HTMLElement | null; if (sc1) sc1.scrollTop = sc0;   // 부품 하나 누를 때마다 맨 위로 튀지 않게
     bind();
   }
 
@@ -127,7 +129,7 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
     (el.querySelector('#rnSell') as HTMLButtonElement | null)?.addEventListener('click', () => { if (sel !== null && sell(rs, sel)) { play('uiClick'); say('부품을 팔았어요.'); sel = null; } render(); });
     (el.querySelector('#rnAuto') as HTMLButtonElement).onclick = () => { autoBuild(rs); sel = null; play('packBurst'); say('가진 부품으로 가장 센 메카를 조립했어요.'); render(); };
     (el.querySelector('#rnGo') as HTMLButtonElement).onclick = () => { const plan = battlePlan(rs); if (!plan) { play('deny'); return; } play('uiClick'); startBattle(plan); };
-    el.querySelectorAll<HTMLButtonElement>('.rn-relic').forEach(b => b.onclick = () => { if (chooseRelic(rs, b.dataset.r!)) { play('ready'); say(`유물「${relicInfo(b.dataset.r!).name}」를 얻었어요!`); } render(); });
+    el.querySelectorAll<HTMLButtonElement>('.rn-relic').forEach(b => b.onclick = () => { if (chooseRelic(rs, b.dataset.r!)) { play('ready'); say(`유물「${relicInfo(b.dataset.r!).name}」를 얻었어요!`); } render(); guard(); });
     (el.querySelector('#rnNext') as HTMLButtonElement | null)?.addEventListener('click', () => { nextRound(rs); sel = null; say(`${rs.round}라운드! 상점이 새로 채워졌어요.`); play('uiClick'); render(); });
     (el.querySelector('#rnAgain') as HTMLButtonElement | null)?.addEventListener('click', () => { rs = newRun(Date.now() & 0x7fffffff); sel = null; say('새 런을 시작했어요.'); play('uiClick'); render(); });
     (el.querySelector('#rnExit') as HTMLButtonElement | null)?.addEventListener('click', () => { play('uiBack'); nav.goHangar(); });
@@ -135,11 +137,15 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
 
   function startBattle(plan: BattlePlan) {
     nav.runBattle(plan, { round: rs.round, rounds: RUN_ROUNDS, hearts: rs.hearts, seed: rs.seed + rs.round }, result => {
-      lastWin = result === 'win'; settle(rs, lastWin);   // 포기도 패배로 정산한다 (전투가 같은 시드라 무료 되돌리기가 됐다) play(lastWin ? 'ready' : 'deny'); show();
+      lastWin = result === 'win'; settle(rs, lastWin);
+      // 포기도 패배로 정산한다 (전투가 같은 시드라 무료 되돌리기가 됐다)
+      play(lastWin ? 'ready' : 'deny'); show();
     });
   }
 
-  function show() { el.hidden = false; render(); }
+  function show() { el.hidden = false; render(); guard(); }
+  /** 화면이 바뀐 직후 0.45초는 눌림을 막는다 — 포기를 연타하면 같은 자리의 ← 가 눌려 격납고로 튕기고, 유물을 연타하면 같은 자리에 뜬 「다음 라운드」 가 눌렸다 */
+  function guard() { el.style.pointerEvents = 'none'; setTimeout(() => { el.style.pointerEvents = ''; }, 450); }
   if (import.meta.env.DEV) (window as unknown as { __awRun?: unknown }).__awRun = { get rs() { return rs; }, render };   // 점검 도구용 (개발 서버에서만)
   return { el, show: () => { show(); }, hide: () => { el.hidden = true; } };
 }
