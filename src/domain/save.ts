@@ -1,4 +1,5 @@
-import type { Build } from './assemble';
+import { assemble, type Build } from './assemble';
+import { PARTS } from '../data/parts';
 import { defaultLoadout, repairLoadout, type Loadout } from './loadout';
 import type { DailyState, AttendState, AdState, MissionType, AdSlot } from './daily';
 import { defaultGoals, WEEKLY, ACHIEVEMENTS, type GoalsState } from './goals';
@@ -107,7 +108,8 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
       const ok = [b.legs, b.body, b.weapon].every(id => allPartIds.includes(id));
       if (!ok) return fb;
       const acc = typeof b.accessory === 'string' && allPartIds.includes(b.accessory) ? b.accessory : undefined;
-      return acc ? { legs: b.legs, body: b.body, weapon: b.weapon, accessory: acc } : { legs: b.legs, body: b.body, weapon: b.weapon };
+      const cand: Build = acc ? { legs: b.legs, body: b.body, weapon: b.weapon, accessory: acc } : { legs: b.legs, body: b.body, weapon: b.weapon };
+      return assemble(cand, PARTS).ok ? cand : fb;   // 부품 id 가 있어도 하중 초과·종류 불일치면 전투가 시작되지 않으니 기본 설계도로 되돌린다
     });
   }
   if (r.partLevels && typeof r.partLevels === 'object') {

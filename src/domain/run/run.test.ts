@@ -145,3 +145,18 @@ describe('조립 런 M2: 보스·유물', () => {
     expect(dmg(['md_dmg', 'md_rate'])).toBeGreaterThan(dmg([]));
   });
 });
+
+describe('조립 런: 레드팀 회귀 (2026-10-27)', () => {
+  it('정산은 한 라운드에 한 번만: 두 번 불러도 코인·유물이 복제되지 않는다', () => {
+    const rs = newRun(1); rs.round = 2; settle(rs, true);
+    const coins = rs.coins, offer = rs.relicOffer;
+    settle(rs, true); settle(rs, false);
+    expect(rs.coins).toBe(coins); expect(rs.relicOffer).toEqual(offer); expect(rs.hearts).toBe(RUN_HEARTS); expect(rs.phase).toBe('won');
+  });
+  it('추천 조립은 벤치를 넘는 부품도 지우지 않는다', () => {
+    const rs = newRun(2); rs.bench = [];
+    for (let i = 0; i < BENCH_MAX; i++) rs.bench.push({ uid: 700 + i, id: 'legs_wheel_scout', star: 1 });
+    const total = () => rs.bench.length + rs.mechs.reduce((a, m) => a + (['legs', 'body', 'weapon', 'accessory'] as const).filter(k => m[k]).length, 0);
+    const before = total(); autoBuild(rs); expect(total()).toBe(before);
+  });
+});

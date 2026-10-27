@@ -200,7 +200,7 @@ export function autoBuild(rs: RunState): void {
     mechs.push(m);
   }
   while (mechs.length < MECH_SLOTS) mechs.push(emptyMech());
-  rs.mechs = mechs; rs.bench = pool.slice(0, BENCH_MAX);
+  rs.mechs = mechs; rs.bench = pool;   // 남는 부품은 벤치에 그대로 둔다 (예전에는 10칸을 넘는 부품이 조용히 사라졌다)
 }
 
 // ───────── 적과 전투 준비 ─────────
@@ -271,6 +271,7 @@ export function chooseRelic(rs: RunState, id: string): boolean {
 
 /** 전투가 끝난 뒤 정산: 이기면 코인·다음 라운드(마지막이면 클리어), 지면 하트 −1 (0 이면 런 종료) */
 export function settle(rs: RunState, win: boolean): void {
+  if (rs.phase !== 'build') return;   // 한 라운드는 한 번만 정산한다 (두 번 부르면 코인·유물이 복제됐다 — 레드팀 2026-10-27)
   if (win) {
     rs.coins += WIN_INCOME + rs.round + rs.bonusIncome;
     rs.phase = rs.round >= RUN_ROUNDS ? 'cleared' : 'won';

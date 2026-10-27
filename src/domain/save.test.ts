@@ -49,3 +49,16 @@ describe('세이브 (TD-006)', () => {
     expect(commanderLevel(1e9).level).toBe(30);
   });
 });
+
+describe('repairSave: 조립이 안 되는 설계도는 기본으로 되돌린다 (레드팀 2026-10-27)', () => {
+  it('부품 id 는 있어도 종류가 틀리거나 하중이 넘으면 그 칸만 기본 설계도로', async () => {
+    const { PARTS } = await import('../data/parts');
+    const ids = PARTS.map(p => p.id), base = defaultSave(ids);
+    const raw = JSON.parse(JSON.stringify(base));
+    raw.deck[0] = { legs: 'wpn_arm_gatling', body: 'body_arm_scout', weapon: 'wpn_arm_gatling' };                 // 다리 칸에 무기
+    raw.deck[1] = { legs: 'legs_biped_light', body: 'body_turret_siege', weapon: 'wpn_cannon_siege' };              // 하중 초과
+    const fixed = repairSave(raw, ids);
+    expect(fixed.deck[0]).toEqual(base.deck[0]); expect(fixed.deck[1]).toEqual(base.deck[1]);
+    expect(fixed.deck[2]).toEqual(base.deck[2]);
+  });
+});

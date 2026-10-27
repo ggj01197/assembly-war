@@ -135,12 +135,11 @@ export function mountRun(root: HTMLElement, nav: Nav): Screen {
 
   function startBattle(plan: BattlePlan) {
     nav.runBattle(plan, { round: rs.round, rounds: RUN_ROUNDS, hearts: rs.hearts, seed: rs.seed + rs.round }, result => {
-      if (result === 'quit') { say('전투를 포기했어요. 다시 준비하세요.'); show(); return; }
-      lastWin = result === 'win'; settle(rs, lastWin); play(lastWin ? 'ready' : 'deny'); show();
+      lastWin = result === 'win'; settle(rs, lastWin);   // 포기도 패배로 정산한다 (전투가 같은 시드라 무료 되돌리기가 됐다) play(lastWin ? 'ready' : 'deny'); show();
     });
   }
 
   function show() { el.hidden = false; render(); }
-  (window as unknown as { __awRun?: unknown }).__awRun = { get rs() { return rs; }, render };   // 점검 도구용
+  if (import.meta.env.DEV) (window as unknown as { __awRun?: unknown }).__awRun = { get rs() { return rs; }, render };   // 점검 도구용 (개발 서버에서만)
   return { el, show: () => { show(); }, hide: () => { el.hidden = true; } };
 }

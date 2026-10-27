@@ -96,7 +96,7 @@ export async function startApp(game: Phaser.Game): Promise<void> {
       stage: {} as Stage, battle, hud: runHud, reducedMotion: s.settings.reducedMotion, speed: runHud.speed, skip: runHud.skip,
       onEnd: (b: Battle) => back(b.result().winner === 0 ? 'win' : 'lose'), onQuit: () => back('quit'),
     });
-    (window as unknown as { __aw: { battle?: Battle } }).__aw.battle = battle;
+    const dbg = (window as unknown as { __aw?: { battle?: Battle } }).__aw; if (dbg) dbg.battle = battle;
   }
 
   /** 보스 러시: 앞 보스를 이긴 뒤 남은 기지 체력 */
@@ -139,7 +139,9 @@ export async function startApp(game: Phaser.Game): Promise<void> {
         // 정산 + 오늘의 임무 진행(승리·생산·처치·포탑·스킬·영웅)
         const commit = () => {
           update(sv => {
-            Object.assign(sv, settled.save);
+            // 5분 버티기 지연 정산: 결과 화면에서 광고 등으로 세이브가 바뀌었을 수 있으니 지금 세이브를 기준으로 다시 계산한다 (예전에는 낡은 스냅샷이 덮어썼다)
+            const fresh = stage.survival ? settleSurvival(sv, stage, res.seconds, win) : settled;
+            Object.assign(sv, fresh.save);
             const n = ensureDaily(sv, todayStr()); if (n !== sv) Object.assign(sv, n);
             if (win) addProgress(sv, 'win', 1);
             addProgress(sv, 'deploy', res.spawned[0]); addProgress(sv, 'kills', res.kills[0]); addProgress(sv, 'towers', res.crowns[0]);
@@ -169,12 +171,12 @@ export async function startApp(game: Phaser.Game): Promise<void> {
       onQuit: () => { finish(); show('hangar'); },
     };
     game.scene.start('battle', cfg);
-    (window as unknown as { __aw: { battle?: Battle } }).__aw.battle = battle;   // 점검 도구용
+    const dbg2 = (window as unknown as { __aw?: { battle?: Battle } }).__aw; if (dbg2) dbg2.battle = battle;   // 점검 도구용
   }
 
   await runOpening(root);
   show('hangar');
   void initAds();   // 광고 SDK 시작 + iOS 추적 허용 창(ATT): 격납고가 뜬 뒤 한 번
   // 점검·스크린샷 도구가 화면을 직접 부를 수 있게 한다
-  (window as unknown as { __aw: unknown }).__aw = { nav, show, store, startBattle, game };
+  if (import.meta.env.DEV) (window as unknown as { __aw: unknown }).__aw = { nav, show, store, startBattle, game };   // 점검 도구용 — 출시 빌드에는 노출하지 않는다(세이브 변조 방지)
 }
