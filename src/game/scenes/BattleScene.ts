@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import { TICK_HZ, ARENA_W, ARENA_H, RIVER_Y0, RIVER_Y1, BRIDGE_X, BRIDGE_HALF, SIDES, TOWER_R, BASE_R, BOMB_RADIUS, towerPos, basePos, POCKET_DEPTH, type Battle, type BattleEvent, type Unit } from '../../domain/battle/sim';
 import { layoutUnit, spriteUrl, spriteUrlBack, spriteSize, spriteSizeBack } from '../unitLayout';
 import animFrames from '../../data/anim-frames.json';
-import { PARTS } from '../../data/parts';
 import { play, playMusic, buzz } from '../../native/audio';
 import type { BattleHud, DragPhase } from '../../ui/battleHud';
 import { skillById, heroById, HERO_WATT } from '../../domain/loadout';
@@ -121,21 +120,24 @@ export class BattleScene extends Phaser.Scene {
 
   init(cfg: BattleConfig) {
     this.cfg = cfg; this.views.clear(); this.ghosts = []; this.fx = []; this.acc = 0; this.selected = null; this.selSkill = null; this.selHero = false; this.ended = false;
+    this.motes = []; this.comboN = 0; this.comboAt = -99;   // 장면은 재사용되니 전투마다 비운다 (먼지가 전투마다 14개씩 쌓여 프레임이 떨어졌다)
     this.baseFlash = [0, 0]; this.firstSpawnHinted = !!cfg.battle.skirmishMode; this.wattFull = false; this.dead = false; this.hover = null; this.bossText = null; this.baseTxt = [null, null];
     this.towerImgs = [[], []]; this.basePlateY = [0, 0]; this.towerKick = [[0, 0, 0], [0, 0, 0]]; this.towerFlash = [[0, 0, 0], [0, 0, 0]]; this.towerSmoke = 0; this.numbers = new Map(); this.drag = null;
   }
 
   preload() {
-    for (const p of PARTS) {
-      if (p.kind === 'accessory') continue;
-      if (!this.textures.exists(p.id)) this.load.image(p.id, spriteUrl(p.id));
-      if (!this.textures.exists('b_' + p.id)) this.load.image('b_' + p.id, spriteUrlBack(p.id));
-    }
-    // 동작 그림은 이번 전투에 나오는 부품 것만 불러온다 (전부 25MB)
+    // 이번 전투에 나오는 부품(다리·몸통·무기)만 불러온다: 부품 그림 전부는 요청 152개·27MB 였고, 동작 시트까지 쌓이면 텍스처가 190개로 늘었다 (레드팀 2026-10-27)
     const need = new Set<string>(), b0 = this.cfg.battle;
-    const addB = (bd?: { legs: string; weapon: string }) => { if (bd) { need.add(bd.legs); need.add(bd.weapon); } };
+    const addB = (bd?: { legs: string; body: string; weapon: string }) => { if (bd) { need.add(bd.legs); need.add(bd.body); need.add(bd.weapon); } };
     for (const t of [0, 1] as const) { for (const c of b0.decks[t]) addB(c.build); addB(b0.hero[t]?.def.build); }
     addB(b0.bossDef?.build);
+    for (const u of b0.units) if (u.hero) { const hd = heroById(u.hero) ?? bossById(u.hero); addB(hd?.build); }   // 조립 런 보스처럼 나중에 나오는 특수 유닛
+    for (const id of need) {
+      if (!this.textures.exists(id)) this.load.image(id, spriteUrl(id));
+      if (!this.textures.exists('b_' + id)) this.load.image('b_' + id, spriteUrlBack(id));
+    }
+    // 이번 전투에 안 쓰는 동작 시트(이전 전투에서 남은 것)는 내려 텍스처 메모리가 쌓이지 않게 한다
+    for (const key of this.textures.getTextureKeys()) if (key.startsWith('an_')) { const pid = key.replace(/^an_(b_)?/, ''); if (!need.has(pid)) this.textures.remove(key); }
     for (const [pid, info] of Object.entries(ANIM)) if (need.has(pid)) for (const side of info.sides) { const key = 'an_' + (side === 'back' ? 'b_' : '') + pid; if (!this.textures.exists(key)) this.load.image(key, `sprites/anim/${pid}_${side}.png`); }
     for (const k of FX_KEYS) if (!this.textures.exists(k)) this.load.image(k, `sprites/fx/${k}.png`);
     for (const k of [...TOWER_KEYS, ...MAIN_KEYS]) if (!this.textures.exists(k)) this.load.image(k, `sprites/tower/${k}.png`);

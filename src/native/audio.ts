@@ -13,7 +13,11 @@ let noiseBuf: AudioBuffer | null = null;
 let enabled = true;
 const lastPlayed: Record<string, number> = {};
 
-export function setSoundEnabled(on: boolean): void { enabled = on; if (!on) playMusic(null); }
+export function setSoundEnabled(on: boolean): void {
+  enabled = on;
+  if (!on) { if (musicCur) { stopTrack(musicCur); musicCur = null; } }   // 원하는 곡(musicWant)은 기억해 둔다
+  else if (musicWant && !musicCur) playMusic(musicWant);                // 다시 켜면 그 곡을 이어서 튼다
+}
 
 function ensure(): AudioContext | null {
   if (ctx) return ctx;
@@ -33,17 +37,18 @@ function ensure(): AudioContext | null {
 export function unlockAudio(): void {
   if (document.hidden) return;
   const c = ensure();
-  if (c && c.state === 'suspended') void c.resume();
+  if (c && c.state !== 'running') void c.resume();   // 'suspended' 뿐 아니라 전화·알람 뒤 iOS 의 'interrupted' 도 되살린다
+  resumeMusic();
 }
 for (const ev of ['touchend', 'click', 'pointerdown', 'keydown']) window.addEventListener(ev, unlockAudio, { passive: true });
 document.addEventListener('visibilitychange', () => {
   if (!ctx) return;
-  if (document.hidden) void ctx.suspend(); else void ctx.resume();
+  if (document.hidden) { pauseMusic(); void ctx.suspend(); } else { void ctx.resume(); resumeMusic(); }
 });
 /** 앱을 나가면(홈 버튼·앱 전환) 소리를 멈춘다 — DOM visibilitychange 만으로는 iOS 앱에서 늦거나 안 올 수 있다 (STUDIO_LEARNINGS B-5). 돌아오면 현재 곡만 이어서. */
 void App.addListener('appStateChange', ({ isActive }) => {
   if (!ctx) return;
-  if (!isActive) void ctx.suspend(); else if (!document.hidden) void ctx.resume();
+  if (!isActive) { pauseMusic(); void ctx.suspend(); } else if (!document.hidden) { void ctx.resume(); resumeMusic(); }
 }).catch(() => { /* 웹(브라우저)에서는 리스너가 없어도 된다 */ });
 
 function env(g: GainNode, t: number, a: number, d: number, peak: number) {
@@ -136,7 +141,8 @@ function playFile(name: string): boolean {
 export function play(name: keyof typeof BANK | string, minGap = 0): void {
   if (!enabled) return;
   const c = ensure();
-  if (!c || c.state !== 'running') return;
+  if (!c) return;
+  if (c.state !== 'running') { if (!document.hidden) void c.resume(); return; }   // 'interrupted' 에서 되살린다
   const now = performance.now();
   if (minGap && now - (lastPlayed[name] ?? 0) < minGap) return;
   lastPlayed[name] = now;
@@ -144,28 +150,26 @@ export function play(name: keyof typeof BANK | string, minGap = 0): void {
 }
 
 // ───────── BGM ─────────
-// public/audio/bgm/<이름>.mp3 (ElevenLabs, 가사 없음 전사 확인). 쓸 때 한 번 내려받아 해독하고 1초 크로스페이드로 바꾼다.
+// public/audio/bgm/<이름>.mp3 (ElevenLabs, 가사 없음 전사 확인).
+// <audio> 로 스트리밍한다 — 2분 이상 곡을 decodeAudioData 로 통째 해독하면 아이폰에서 무음이 되고 PCM 이 곡당 44~110MB 라 네 곡이면 240MB 가 상주했다
+// (STUDIO_LEARNINGS 「아이폰 BGM 무음」·B절, 레드팀 2026-10-27). 페이드는 createMediaElementSource → GainNode (아이폰은 <audio>.volume 이 안 먹는다).
 export type MusicName = 'hangar' | 'battle' | 'boss' | 'survival';
 const MUSIC_VOL = 0.32, FADE = 1.0;
-const musicBuf: Partial<Record<MusicName, AudioBuffer>> = {};
-const musicLoading: Partial<Record<MusicName, Promise<AudioBuffer | null>>> = {};
-let musicCur: { name: MusicName; src: AudioBufferSourceNode; gain: GainNode } | null = null;
+type Cur = { name: MusicName; el: HTMLAudioElement; gain: GainNode | null; node: MediaElementAudioSourceNode | null };
+let musicCur: Cur | null = null;
 let musicWant: MusicName | null = null;
 
-function loadMusic(name: MusicName): Promise<AudioBuffer | null> {
-  if (musicBuf[name]) return Promise.resolve(musicBuf[name]!);
-  if (musicLoading[name]) return musicLoading[name]!;
-  const c = ensure();
-  if (!c) return Promise.resolve(null);
-  musicLoading[name] = fetch(`audio/bgm/${name}.mp3`)
-    .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
-    .then(ab => new Promise<AudioBuffer | null>(res => { c.decodeAudioData(ab, b => { musicBuf[name] = b; res(b); }, () => res(null)); }))
-    .catch(() => null);
-  return musicLoading[name]!;
-}
+/** 스트리밍이라 미리 해독할 것이 없다 (이전 API 호환용) */
+export function preloadMusic(_name: MusicName): void { /* 없음 */ }
 
-/** 곧 쓸 곡을 미리 내려받아 해독해 둔다(보스 곡처럼 갑자기 바꿀 때 끊기지 않게). */
-export function preloadMusic(name: MusicName): void { void loadMusic(name); }
+function stopTrack(o: Cur): void {
+  const kill = () => { try { o.el.pause(); o.el.removeAttribute('src'); o.el.load(); } catch { /* 이미 멈춤 */ } try { o.node?.disconnect(); o.gain?.disconnect(); } catch { /* 이미 끊김 */ } };
+  if (ctx && o.gain) {
+    const t = ctx.currentTime;
+    o.gain.gain.cancelScheduledValues(t); o.gain.gain.setValueAtTime(o.gain.gain.value, t); o.gain.gain.linearRampToValueAtTime(0.0001, t + FADE);
+    setTimeout(kill, (FADE + 0.1) * 1000);
+  } else kill();
+}
 
 /** 배경 음악을 바꾼다. null 이면 서서히 끈다. 같은 곡이 이미 나오면 아무것도 안 한다. */
 export function playMusic(name: MusicName | null): void {
@@ -174,25 +178,23 @@ export function playMusic(name: MusicName | null): void {
   const c = ensure();
   if (!c || !master) return;
   if (musicCur && musicCur.name === name) return;
-  const old = musicCur;
-  if (old) {
-    const t = c.currentTime;
-    old.gain.gain.cancelScheduledValues(t); old.gain.gain.setValueAtTime(old.gain.gain.value, t); old.gain.gain.linearRampToValueAtTime(0.0001, t + FADE);
-    try { old.src.stop(t + FADE + 0.05); } catch { /* 이미 멈춤 */ }
-    musicCur = null;
-  }
+  if (musicCur) { stopTrack(musicCur); musicCur = null; }
   if (!name) return;
-  void loadMusic(name).then(b => {
-    if (!b || musicWant !== name || musicCur || !ctx || !master) return; // 그 사이 다른 곡을 원했으면 무시
-    const t = ctx.currentTime;
-    const src = ctx.createBufferSource(), gain = ctx.createGain();
-    src.buffer = b; src.loop = true;
-    gain.gain.setValueAtTime(0.0001, t); gain.gain.linearRampToValueAtTime(MUSIC_VOL, t + FADE);
-    src.connect(gain); gain.connect(master);
-    src.start(t);
-    musicCur = { name, src, gain };
-  });
+  const el = new Audio(`audio/bgm/${name}.mp3`);
+  el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', '');
+  let node: MediaElementAudioSourceNode | null = null, gain: GainNode | null = null;
+  try {
+    node = c.createMediaElementSource(el); gain = c.createGain();
+    gain.gain.setValueAtTime(0.0001, c.currentTime); gain.gain.linearRampToValueAtTime(MUSIC_VOL, c.currentTime + FADE);
+    node.connect(gain); gain.connect(master);
+  } catch { node = null; gain = null; el.volume = MUSIC_VOL; }   // 그래프를 못 만들면 요소 볼륨으로 (아이폰은 무시되지만 소리는 난다)
+  musicCur = { name, el, gain, node };
+  void el.play().catch(() => { /* 첫 터치 전이면 unlockAudio 가 다시 시도한다 */ });
 }
+
+/** 앱을 나가면 곡을 멈추고, 돌아오면 지금 곡만 이어서 튼다 */
+function pauseMusic(): void { try { musicCur?.el.pause(); } catch { /* 무시 */ } }
+function resumeMusic(): void { if (enabled && musicCur && musicCur.el.paused && !document.hidden) void musicCur.el.play().catch(() => { /* 다음 터치에서 */ }); }
 
 /** 진동 (Capacitor Haptics). 웹·미지원 기기에서는 아무 일도 하지 않는다. 약 'light' · 중 'medium' · 강 'heavy' · 성공 'success' */
 let hapticsOn = true;
