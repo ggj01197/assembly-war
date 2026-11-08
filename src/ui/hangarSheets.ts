@@ -111,6 +111,11 @@ export function shopHtml(): string {
       <div class="cp-box"><label for="cpCode">쿠폰 코드</label><div class="cp-row"><input id="cpCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" maxlength="40" placeholder="코드를 입력하세요"><button class="btn primary" id="cpGo" type="button">받기</button></div><p class="cp-msg" id="cpMsg" role="status"></p></div>
       <p class="sp-note shop-note">테스트 빌드에서는 결제가 열리지 않아요. 출시 때 같은 목록으로 열립니다. 능력치를 파는 상품은 없고, 유료 상자도 없습니다.</p>
       <div class="stage-list">${groups}</div>
+      <details class="sp-note priv"><summary>개인정보 처리방침 · 문의</summary>
+        <p>회원가입·로그인이 없고, 운영자는 이름·연락처 등 개인정보를 수집하지 않습니다. 진행 기록은 내 기기에만 저장됩니다(Android 는 내 Google 기기 백업에 포함될 수 있음).</p>
+        <p>보상형 광고(광고 보고 받기)를 보여 주기 위해 Google AdMob 이 광고 식별자를 처리합니다. iOS 는 추적 허용 여부를 묻고, 유럽 등에서는 동의 양식이 먼저 뜹니다. 거절해도 게임은 똑같이 즐길 수 있습니다.</p>
+        <p>전체 방침: 웹의 privacy.html · 문의: ggj01197@gmail.com</p>
+      </details>
     </div>`;
 }
 

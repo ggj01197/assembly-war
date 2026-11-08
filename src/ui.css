@@ -558,3 +558,5 @@ i.brief { display: block; font-style: normal; color: #9fd9ff; font-weight: 700; 
 .rm-chips { flex-wrap: wrap; justify-content: center; } .rm-chip { min-width: 44px; height: 44px; flex: 0 0 auto; max-width: none; width: 44px; }
 .rn-result { max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 24px); overflow: auto; }
 .run-hud .rb-sides { top: calc(var(--safe-top) + 72px); }
+
+.priv{margin:10px 12px;text-align:left}.priv summary{cursor:pointer;color:var(--accent,#5fd3ff)}.priv p{margin:6px 0}

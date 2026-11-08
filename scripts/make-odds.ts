@@ -17,7 +17,7 @@ ${rows}
 <p>천장: 에픽 부품 조각이 ${SUPPLY.pityEvery - 1}상자 연속 나오지 않으면 다음 상자의 마지막 칸은 에픽 부품 조각이 확정입니다.</p>
 <p><small>부품 등급은 같은 종류(다리·몸통·무기·액세서리) 안에서 와트(액세서리는 무게)가 높은 순으로 위 20% 에픽, 다음 30% 희귀, 나머지 일반입니다.</small></p>
 ${parts}
-<p><small>문의·정정: 앱 설정의 문의 메일. 이 표는 앱 안 「보급 → 확률표」와 같은 숫자입니다.</small></p>
+<p><small>문의·정정: ggj01197@gmail.com ·  <a href="privacy.html" style="color:#5fd3ff">개인정보 처리방침</a>. 이 표는 앱 안 「보급 → 확률표」와 같은 숫자입니다.</small></p>
 </body></html>
 `;
 writeFileSync(new URL('../public/odds.html', import.meta.url), html);

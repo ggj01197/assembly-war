@@ -1,6 +1,6 @@
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { AdMob, RewardAdPluginEvents } from '@capacitor-community/admob';
+import { AdMob, AdmobConsentStatus, RewardAdPluginEvents } from '@capacitor-community/admob';
 import { ADMOB_TEST_MODE, ADS_ENABLED, REWARDED_UNIT_ID } from '../config/ads';
 
 /**
@@ -42,13 +42,27 @@ async function requestTracking(): Promise<string> {
   return status;
 }
 
-/** SDK 시작 + ATT 팝업(iOS). 앱을 켠 뒤 격납고가 뜨면 한 번 부른다 (Apple 2.1 반려 교훈) */
+/**
+ * Google UMP 동의(EEA·영국 등). 동의 정보를 갱신하고 양식이 필요하면 띄운다. 동의 없이는 광고를 요청하면 안 되므로 canRequestAds 를 돌려준다.
+ * AdMob 콘솔 「개인 정보 보호 및 메시지」에 GDPR 메시지를 만들어 둬야 양식이 뜬다(없으면 필요 없는 지역처럼 통과).
+ * 조회 자체가 실패하면(오프라인 등) 광고를 개인 맞춤 없이(npa) 시도한다.
+ */
+async function askConsent(): Promise<boolean> {
+  try {
+    let info = await AdMob.requestConsentInfo();
+    if (info.isConsentFormAvailable && info.status === AdmobConsentStatus.REQUIRED) { await whenActive(); info = await AdMob.showConsentForm(); }
+    return info.canRequestAds !== false;
+  } catch { return true; }
+}
+
+/** SDK 시작 + 동의(UMP) + ATT 팝업(iOS). 앱을 켠 뒤 격납고가 뜨면 한 번 부른다 (Apple 2.1 반려 교훈) */
 export function initAds(): Promise<void> {
   if (!adsSupported() || !isNative()) return Promise.resolve();
   return (initP ??= (async () => {
+    const consent = await askConsent();
     try { npa = isAndroid() ? true : (await requestTracking()) !== 'authorized'; } catch { npa = true; }
     await AdMob.initialize({ initializeForTesting: ADMOB_TEST_MODE });
-    rewardedReady = load();
+    rewardedReady = consent ? load() : Promise.resolve(false);
   })().catch(() => { initP = null; }));
 }
 
