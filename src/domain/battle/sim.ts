@@ -413,8 +413,14 @@ export class Battle {
       u.tgt = lead ? { kind: 'u', id: lead.id } : null; return;
     }
     if (this.skirmishMode) {   // 자동 전투: 가장 가까운 (때릴 수 있는) 적을 곧장 노린다
-      let nb: Target | null = null, nd = Infinity;
-      for (const e of this.units) { if (e.team !== foe || e.hp <= 0 || !canHit(u.stats, e.stats)) continue; const d = Math.hypot(e.x - u.x, e.y - u.y); if (d < nd || (d === nd && nb && nb.kind === 'u' && e.id < nb.id)) { nd = d; nb = { kind: 'u', id: e.id }; } }
+      // 최소 사거리가 있는 유닛(박격포)은 너무 가까운 적을 뒤로 미루고, 쏠 수 있는 거리의 적을 먼저 고른다 (가까운 적에 묶여 교착되지 않게)
+      const minR = minRangeTiles(u.stats);
+      let nb: Target | null = null, nd = Infinity, nbFar = false;
+      for (const e of this.units) {
+        if (e.team !== foe || e.hp <= 0 || !canHit(u.stats, e.stats)) continue;
+        const d = Math.hypot(e.x - u.x, e.y - u.y), far = minR <= 0 || d - e.r - u.r >= minR;
+        if ((far && !nbFar) || (far === nbFar && (d < nd || (d === nd && nb && nb.kind === 'u' && e.id < nb.id)))) { nd = d; nb = { kind: 'u', id: e.id }; nbFar = far; }
+      }
       u.tgt = nb; return;
     }
     let best: Target | null = null, bd = Infinity;
@@ -517,7 +523,7 @@ export class Battle {
       const mu = this.mod[u.team];
       const dist = Math.hypot(pos.x - u.x, pos.y - u.y), gap = dist - pos.r - u.r;
       const range = this.rangeOf(u), minR = minRangeTiles(u.stats);
-      if (gap > range || gap < minR) { u.cd = 0; continue; }          // 사거리 밖(이동 단계에서 다가간다) 또는 너무 가까움
+      if (gap > range || (minR > 0 && gap < minR)) { u.cd = 0; continue; }          // 사거리 밖(이동 단계에서 다가간다) 또는 너무 가까움
       const rate = Math.max(0.2, u.stats.rate) * (this.eff.overload[u.team] > 0 ? 1.3 : 1) * (1 + mu.rate);
       const pc = Math.min(0.9, u.stats.pierce + mu.pierce);
       const foe: Team = u.team === 0 ? 1 : 0;
@@ -638,7 +644,7 @@ export class Battle {
             const ally = u.tgt.kind === 'u' ? this.unitById(u.tgt.id) : null;
             if (ally && ally.hp < ally.maxHp) { if (gap > range) goal = pos; }          // 다친 아군: 사거리까지 다가가 치료
             else if (dist > 2.6) goal = pos;                                              // 아니면 앞선 아군 곁을 따른다
-          } else if (gap > range || gap < minR) goal = pos;
+          } else if (gap > range || (minR > 0 && gap < minR)) goal = pos;
         }
       } else if (!this.skirmishMode && !this.canHitBuildings(u)) {
         // 건물을 못 때리는 유닛(대공 전용): 적 진영 쪽으로 나아가되 포탑 사거리 밖에서 멈춘다

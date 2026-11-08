@@ -17,3 +17,9 @@ export async function setItem(key: string, value: string): Promise<void> {
     localStorage.setItem(key, value);
   } catch { /* 저장소가 막혀도 게임은 계속 */ }
 }
+
+/** 읽기 실패를 「데이터 없음」과 구분하는 읽기 — 실패하면 던진다 (세이브 로드용: 읽기 실패 때 새 게임이 진짜 세이브를 덮어쓰지 않게) */
+export async function getItemStrict(key: string): Promise<string | null> {
+  if (native()) return (await Preferences.get({ key })).value ?? null;
+  return localStorage.getItem(key);
+}

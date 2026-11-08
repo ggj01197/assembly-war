@@ -112,7 +112,8 @@ export function buy(rs: RunState, idx: number): { ok: boolean; msg: string } {
   const o = rs.shop[idx];
   if (rs.phase !== 'build' || !o) return { ok: false, msg: '살 수 없어요.' };
   if (rs.coins < o.cost) return { ok: false, msg: `코인이 모자라요 (${o.cost} 필요).` };
-  if (rs.bench.length >= BENCH_MAX) return { ok: false, msg: '벤치가 가득 찼어요. 부품을 장착하거나 팔아요.' };
+  const wouldMerge = rs.bench.filter(b => b.id === o.id && b.star === 1).length >= 2;   // 사면 곧바로 합쳐져 칸이 비는 경우는 가득 차도 살 수 있다
+  if (rs.bench.length >= BENCH_MAX && !wouldMerge) return { ok: false, msg: '벤치가 가득 찼어요. 부품을 장착하거나 팔아요.' };
   rs.coins -= o.cost; rs.shop[idx] = null;
   rs.bench.push({ uid: rs.nextUid++, id: o.id, star: 1 });
   const m = mergeBench(rs);
