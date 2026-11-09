@@ -1,3 +1,4 @@
+import { PURCHASES_LIVE } from '../config/shop';
 import { PARTS } from '../data/parts';
 import { CATALOG, GROUP_LABEL, won, type ProductGroup } from '../data/catalog';
 import { store, update } from '../game/store';
@@ -100,7 +101,7 @@ export function upgradeHtml(st: SheetState): string {
 }
 
 export function shopHtml(): string {
-  const groups = (Object.keys(GROUP_LABEL) as ProductGroup[]).map(g => {
+  const groups = !PURCHASES_LIVE ? '' : (Object.keys(GROUP_LABEL) as ProductGroup[]).map(g => {
     const items = CATALOG.filter(p => p.group === g);
     if (!items.length) return '';
     return `<h3 class="gear-h">${GROUP_LABEL[g]}</h3>${items.map(p => `<div class="shop-row"><span class="tx"><b>${esc(p.name)}</b><small>${esc(p.desc)}</small></span><button class="btn shop-buy" data-id="${p.id}" type="button">${won(p.krw)}${p.per ? ` / ${p.per}` : ''}</button></div>`).join('')}`;
@@ -109,7 +110,7 @@ export function shopHtml(): string {
     <div class="sheet" role="dialog" aria-label="상점">
       ${head('상점')}
       <div class="cp-box"><label for="cpCode">쿠폰 코드</label><div class="cp-row"><input id="cpCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" maxlength="40" placeholder="코드를 입력하세요"><button class="btn primary" id="cpGo" type="button">받기</button></div><p class="cp-msg" id="cpMsg" role="status"></p></div>
-      <p class="sp-note shop-note">테스트 빌드에서는 결제가 열리지 않아요. 출시 때 같은 목록으로 열립니다. 능력치를 파는 상품은 없고, 유료 상자도 없습니다.</p>
+      <p class="sp-note shop-note">${PURCHASES_LIVE ? '' : '유료 상품은 아직 열리지 않았어요. 지금은 쿠폰과 광고 보상으로 받을 수 있어요. '}능력치를 파는 상품은 없고, 유료 상자도 없습니다.</p>
       <div class="stage-list">${groups}</div>
       <details class="sp-note priv"><summary>개인정보 처리방침 · 문의</summary>
         <p>회원가입·로그인이 없고, 운영자는 이름·연락처 등 개인정보를 수집하지 않습니다. 진행 기록은 내 기기에만 저장됩니다(Android 는 내 Google 기기 백업에 포함될 수 있음).</p>

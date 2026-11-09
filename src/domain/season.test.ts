@@ -3,7 +3,9 @@ import { PARTS } from '../data/parts';
 import { EVENT_STAGE, stageById, isUnlocked } from '../data/stages';
 import { defaultSave, repairSave } from './save';
 import { SEASONS, activeSeason, upcomingSeason, daysLeft, daysBetween, addSeasonPoints, battlePoints, claimMilestone, milestoneReady, settleEvent, SEASON_DAILY_POINT_CAP, EVENT_DAILY_CAP } from './season';
+import { createHash } from 'node:crypto';
 import { COUPONS, couponHash, normalize, redeemCoupon } from './coupons';
+import { sha256Hex } from './sha256';
 
 const base = () => defaultSave(PARTS.map(p => p.id));
 const IN = '2026-11-10', BEFORE = '2026-10-21', AFTER = '2027-01-02';
@@ -57,18 +59,23 @@ describe('시즌 이벤트', () => {
 
 describe('쿠폰 코드', () => {
   it('해시는 공백·하이픈·대소문자와 무관하고 코드는 앱 안에 평문으로 없다', () => {
-    expect(couponHash('welcome-assembly')).toBe(couponHash(' WELCOME ASSEMBLY ')); expect(normalize('a-b_c d')).toBe('ABCD');
-    expect(COUPONS.every(c => /^[0-9a-f]{8}$/.test(c.h))).toBe(true);
+    expect(couponHash('test-code-0001')).toBe(couponHash(' TEST CODE 0001 ')); expect(normalize('a-b_c d')).toBe('ABCD');
+    expect(COUPONS.every(c => /^[0-9a-f]{16}$/.test(c.h))).toBe(true);
+  });
+  it('SHA-256 구현이 node crypto 와 같다 (빈 문자열·긴 문자열·한글)', () => {
+    for (const t of ['', 'abc', 'x'.repeat(55), 'x'.repeat(56), 'x'.repeat(64), 'x'.repeat(1000), '조립전쟁']) expect(sha256Hex(t)).toBe(createHash('sha256').update(t).digest('hex'));
   });
   it('맞는 코드는 보상을 주고 한 번만, 틀린 코드·짧은 코드는 거절', () => {
     let s = base();
-    const r = redeemCoupon(s, 'welcome-assembly', IN); expect(r.ok).toBe(true); if (!r.ok) return;
+    COUPONS.push({ h: couponHash('TEST-CODE-WELCOME'), label: '시험', reward: { ore: 500, exp: 0, tickets: 2 } });
+    const r = redeemCoupon(s, 'test-code-welcome', IN); expect(r.ok).toBe(true); if (!r.ok) return;
     s = r.save; expect(s.ore).toBe(300 + 500); expect(s.tickets).toBe(2);
-    const again = redeemCoupon(s, 'WELCOMEASSEMBLY', IN); expect(again.ok).toBe(false);
+    const again = redeemCoupon(s, 'TESTCODEWELCOME', IN); expect(again.ok).toBe(false);
     expect(redeemCoupon(s, 'NOPE-NOPE', IN).ok).toBe(false); expect(redeemCoupon(s, 'ab', IN).ok).toBe(false); expect(redeemCoupon(s, 'x'.repeat(50), IN).ok).toBe(false);
   });
   it('유효기간이 지난 쿠폰은 거절', () => {
-    expect(redeemCoupon(base(), 'STARLIGHT-WINTER', '2026-12-31').ok).toBe(true);
-    const late = redeemCoupon(base(), 'STARLIGHT-WINTER', '2027-01-01'); expect(late.ok).toBe(false); if (!late.ok) expect(late.msg).toContain('기간');
+    COUPONS.push({ h: couponHash('TEST-CODE-WINTER'), label: '시험2', reward: { ore: 0, exp: 0, tickets: 3 }, until: '2026-12-31' });
+    expect(redeemCoupon(base(), 'TEST-CODE-WINTER', '2026-12-31').ok).toBe(true);
+    const late = redeemCoupon(base(), 'TEST-CODE-WINTER', '2027-01-01'); expect(late.ok).toBe(false); if (!late.ok) expect(late.msg).toContain('기간');
   });
 });

@@ -191,7 +191,7 @@ export function repairSave(raw: unknown, allPartIds: string[]): SaveData {
       ptsDate: typeof q.ptsDate === 'string' ? q.ptsDate : '', ptsToday: Math.floor(num(q.ptsToday, 0, 0, 9999)), evDate: typeof q.evDate === 'string' ? q.evDate : '', evDone: Math.floor(num(q.evDone, 0, 0, 99)),
     };
   }
-  if (Array.isArray((r as { coupons?: unknown }).coupons)) out.coupons = ((r as { coupons: unknown[] }).coupons).filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{8}$/.test(x)).slice(-200);
+  if (Array.isArray((r as { coupons?: unknown }).coupons)) out.coupons = ((r as { coupons: unknown[] }).coupons).filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{8}([0-9a-f]{8})?$/.test(x)).slice(-200);
   const ct = (r as { cuts?: unknown }).cuts; if (Array.isArray(ct)) out.cuts = [...new Set(ct.filter((x): x is string => typeof x === 'string' && /^cs-[a-z0-9]{2,8}$/.test(x)))].slice(0, 20);
   const sty = (r as { story?: unknown }).story; if (Array.isArray(sty)) out.story = Object.keys(STORY).filter(id => (sty as unknown[]).includes(id));
   const cm = (r as { clockMax?: unknown }).clockMax; out.clockMax = typeof cm === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cm) && cm < '2100' ? cm : '';
