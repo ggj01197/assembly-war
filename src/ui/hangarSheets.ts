@@ -115,7 +115,7 @@ export function shopHtml(): string {
       <details class="sp-note priv"><summary>개인정보 처리방침 · 문의</summary>
         <p>회원가입·로그인이 없고, 운영자는 이름·연락처 등 개인정보를 수집하지 않습니다. 진행 기록은 내 기기에만 저장됩니다(Android 는 내 Google 기기 백업에 포함될 수 있음).</p>
         <p>보상형 광고(광고 보고 받기)를 보여 주기 위해 Google AdMob 이 광고 식별자를 처리합니다. iOS 는 추적 허용 여부를 묻고, 유럽 등에서는 동의 양식이 먼저 뜹니다. 거절해도 게임은 똑같이 즐길 수 있습니다.</p>
-        <p>전체 방침: 웹의 privacy.html · 문의: ggj01197@gmail.com</p>
+        <p>전체 방침: shortappstudio.com/assembly-war/privacy · 문의: ggj01197@gmail.com</p>
       </details>
     </div>`;
 }
